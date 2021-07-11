@@ -1,5 +1,7 @@
 pub type ActorID = usize;
 
+pub mod pipelines;
+
 pub mod app;
 pub use app::*;
 

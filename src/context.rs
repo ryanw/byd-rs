@@ -11,6 +11,7 @@ pub struct DrawContext<'a> {
 	pub(crate) uniforms: UniformMap,
 	pub(crate) viewport_size: (f32, f32),
 	pub(crate) state: &'a mut State,
+	render_pass: wgpu::RenderPass<'a>,
 }
 
 #[derive(Clone)]
@@ -42,13 +43,22 @@ impl<'a> AttachContext<'a> {
 }
 
 impl<'a> DrawContext<'a> {
-	pub fn new(state: &'a mut State) -> Self {
+	pub fn new(state: &'a mut State, render_pass: wgpu::RenderPass<'a>) -> Self {
 		Self {
 			dt: Duration::default(),
 			uniforms: UniformMap::new(),
 			viewport_size: (0.0, 0.0),
 			state,
+			render_pass,
 		}
+	}
+
+	pub fn render_pass(&self) -> &wgpu::RenderPass<'a> {
+		&self.render_pass
+	}
+
+	pub fn render_pass_mut(&mut self) -> &mut wgpu::RenderPass<'a> {
+		&mut self.render_pass
 	}
 
 	pub fn device(&self) -> &wgpu::Device {

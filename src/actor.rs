@@ -6,8 +6,8 @@ pub struct Actor {
 }
 
 impl Drawable for Actor {
-	fn draw<'a>(&'a mut self, ctx: &mut DrawContext, render_pass: &mut wgpu::RenderPass<'a>) {
-		self.geometry.draw(ctx, render_pass);
+	fn draw<'a>(&'a mut self, ctx: &mut DrawContext<'a>) {
+		self.geometry.draw(ctx);
 	}
 
 	fn mount(&mut self, ctx: &mut MountContext) {

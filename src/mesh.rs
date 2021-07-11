@@ -55,14 +55,14 @@ impl Mesh<SimpleVertex> {
 }
 
 impl<V: Vertex> Drawable for Mesh<V> {
-	fn draw<'a>(&'a mut self, ctx: &mut DrawContext, render_pass: &mut wgpu::RenderPass<'a>) {
-		let device = ctx.device();
+	fn draw<'a>(&'a mut self, ctx: &mut DrawContext<'a>) {
 		if !self.uploaded {
-			self.upload(device).unwrap();
+			self.upload(ctx.device()).unwrap();
 		}
 
 		let len = self.vertices.len() as u32;
 		if let Some(buffer) = self.buffer.as_mut() {
+			let render_pass = ctx.render_pass_mut();
 			render_pass.set_vertex_buffer(0, buffer.slice(..));
 			render_pass.draw(0..len, 0..1);
 		}

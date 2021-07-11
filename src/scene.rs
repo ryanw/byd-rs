@@ -21,7 +21,7 @@ impl RasterScene {
 		}
 	}
 
-	pub fn draw<'a>(&'a mut self, ctx: &mut DrawContext, render_pass: &mut wgpu::RenderPass<'a>) {
+	pub fn draw<'a>(&'a mut self, ctx: &mut DrawContext<'a>) {
 		let view = self.camera.view();
 		let u_camera: [f32; 3] = view.transform_point(Point3::new(0.0, 0.0, 0.0)).into();
 		let u_look_at: [f32; 3] = view.transform_point(Point3::new(0.0, 0.0, 1.0)).into();
@@ -29,7 +29,7 @@ impl RasterScene {
 		ctx.insert_uniform("uLookAt", u_look_at);
 		ctx.insert_uniform("uFogColor", [0.4, 0.3, 0.2]);
 		for (_id, actor) in &mut self.actors {
-			actor.draw(ctx, render_pass)
+			actor.draw(ctx)
 		}
 	}
 

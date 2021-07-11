@@ -122,7 +122,7 @@ impl State {
 				label: Some("Render Encoder"),
 			});
 		{
-			let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+			let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				label: Some("Render Pass"),
 				color_attachments: &[wgpu::RenderPassColorAttachment {
 					view: &frame.view,
@@ -140,8 +140,8 @@ impl State {
 				depth_stencil_attachment: None,
 			});
 
-			let mut ctx = DrawContext::new(self);
-			app.draw(&mut ctx, &mut render_pass);
+			let mut ctx = DrawContext::new(self, render_pass);
+			app.draw(&mut ctx);
 		}
 
 		// submit will accept anything that implements IntoIter
