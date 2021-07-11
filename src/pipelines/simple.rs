@@ -1,11 +1,30 @@
 use crate::{SimpleVertex, Vertex};
+use std::mem::size_of;
+use wgpu::util::DeviceExt;
 
 pub struct SimplePipeline {
 	render_pipeline: wgpu::RenderPipeline,
+	bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl SimplePipeline {
 	pub fn new(device: &wgpu::Device) -> Self {
+		// Uniforms
+		let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			entries: &[wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStage::VERTEX,
+				ty: wgpu::BindingType::Buffer {
+					ty: wgpu::BufferBindingType::Uniform,
+					has_dynamic_offset: false,
+					min_binding_size: None,
+				},
+				count: None,
+			}],
+			label: Some("uniform_bind_group_layout"),
+		});
+
+		// Shader
 		log::debug!("Creating vertex shader");
 		let vs_module =
 			device.create_shader_module(&wgpu::include_spirv!("../../shaders/simple.vert.spv"));
@@ -16,7 +35,7 @@ impl SimplePipeline {
 		log::debug!("Creating pipeline layout");
 		let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Render Pipeline Layout"),
-			bind_group_layouts: &[],
+			bind_group_layouts: &[&bind_group_layout],
 			push_constant_ranges: &[],
 		});
 
@@ -58,11 +77,16 @@ impl SimplePipeline {
 
 		Self {
 			render_pipeline: pipeline,
+			bind_group_layout,
 		}
 	}
 
 	pub fn apply<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
 		render_pass.set_pipeline(&self.render_pipeline);
 	}
-}
 
+	/// Get a reference to the simple pipeline's bind group layout.
+	pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+		&self.bind_group_layout
+	}
+}

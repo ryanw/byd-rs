@@ -1,5 +1,11 @@
 #version 440
 
+layout(binding = 0)
+uniform Camera {
+	vec4 uColor;
+};
+
+
 //layout(binding = 0) uniform GlobalUniforms {
 //	vec2 uResolution;
 //	float uTime;
@@ -15,7 +21,7 @@ void main() {
 	// Quad always fills the whole screen
 	gl_Position = vec4(position.xyz, 1.0);
 	vTexCoord = position.xy;
-	vColor = color;
+	vColor = uColor;
 	//vTexCoord = (position.xy * g.uResolution) / g.uResolution.y;
 	//vTexCoord.x += cos(g.uTime);
 	//vTexCoord.y += sin(g.uTime);

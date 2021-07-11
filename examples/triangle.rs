@@ -1,9 +1,7 @@
 use byd::{
-	Actor, App, AttachContext, DrawContext, Event, Material, Mesh, RasterScene,
-	SimpleVertex, UpdateContext, Vertex, Window,
-	pipelines::SimplePipeline,
+	pipelines::SimplePipeline, Actor, App, AttachContext, DrawContext, Event, Material, Mesh,
+	RasterScene, SimpleVertex, UpdateContext, Vertex, Window,
 };
-
 
 struct CubeApp {
 	scene: Option<RasterScene>,
@@ -22,8 +20,7 @@ impl CubeApp {
 impl App for CubeApp {
 	fn attach(&mut self, ctx: &mut AttachContext) {
 		let device = ctx.device();
-		let mut scene = RasterScene::new(device);
-		let pipeline = SimplePipeline::new(device);
+		let mut scene = RasterScene::new();
 		let cube = Actor {
 			geometry: Box::new(Mesh::cube(0.1)),
 			material: Material::default(),
@@ -31,15 +28,11 @@ impl App for CubeApp {
 
 		scene.add(cube);
 		self.scene = Some(scene);
-		self.pipeline = Some(pipeline);
 	}
 
 	fn draw<'a>(&'a mut self, ctx: &mut DrawContext<'a>) {
 		if let Some(scene) = &mut self.scene {
-			if let Some(pipeline) = self.pipeline.as_ref() {
-				pipeline.apply(ctx.render_pass_mut());
-				scene.draw(ctx);
-			}
+			scene.draw(ctx);
 		}
 	}
 

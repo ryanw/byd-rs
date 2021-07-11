@@ -61,6 +61,14 @@ impl<'a> DrawContext<'a> {
 		&mut self.render_pass
 	}
 
+	pub fn queue(&self) -> &wgpu::Queue {
+		&self.state.queue
+	}
+
+	pub fn queue_mut(&mut self) -> &mut wgpu::Queue {
+		&mut self.state.queue
+	}
+
 	pub fn device(&self) -> &wgpu::Device {
 		&self.state.device
 	}
