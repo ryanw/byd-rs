@@ -47,7 +47,7 @@ impl Mesh<SimpleVertex> {
 			.chunks(3)
 			.map(|v| SimpleVertex {
 				position: Point3::new(v[0] * size, v[1] * size, v[2] * size),
-				color: (1.0, v[1], 0.0, 0.7),
+				color: (v[0] * 0.5 + 0.5, v[1] * 0.5 + 0.5, v[2] * 0.5 + 0.5, 0.7),
 			})
 			.collect();
 		Self::new(vertices)

@@ -1,6 +1,14 @@
 use std::f32::consts::PI;
 
-use cgmath::{EuclideanSpace, Euler, Matrix4, Point3, Rad, Transform, Vector3};
+use cgmath::{Deg, EuclideanSpace, Euler, Matrix4, Point3, Rad, SquareMatrix, Transform, Vector3};
+
+#[rustfmt::skip]
+pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
+	1.0, 0.0, 0.0, 0.0,
+	0.0, 1.0, 0.0, 0.0,
+	0.0, 0.0, 0.5, 0.0,
+	0.0, 0.0, 0.5, 1.0,
+);
 
 pub trait Camera {
 	fn view(&self) -> Matrix4<f32>;
@@ -12,16 +20,22 @@ pub struct FreeCamera {
 	height: f32,
 	position: Point3<f32>,
 	rotation: Euler<Rad<f32>>,
+	projection: Matrix4<f32>,
 }
 
 impl FreeCamera {
 	pub fn new() -> Self {
-		Self {
+		let mut camera = Self {
 			width: 1.0,
 			height: 1.0,
-			position: Point3::new(0.0, 0.0, 50.0),
+			position: Point3::new(0.0, 1.0, 0.0),
 			rotation: Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
-		}
+			projection: Matrix4::identity(),
+		};
+
+		camera.resize(1280.0, 768.0);
+
+		camera
 	}
 
 	pub fn translate(&mut self, x: f32, y: f32, z: f32) {
@@ -52,6 +66,11 @@ impl FreeCamera {
 	pub fn resize(&mut self, width: f32, height: f32) {
 		self.width = width;
 		self.height = height;
+		let aspect = width / height;
+		let fov = 45.0;
+		let near = 0.1;
+		let far = 1000.0;
+		self.projection = cgmath::perspective(Deg(fov), aspect, near, far);
 	}
 
 	pub fn resolution(&self) -> (f32, f32) {
@@ -86,6 +105,10 @@ impl FreeCamera {
 	/// Get a reference to the free camera's height.
 	pub fn height(&self) -> f32 {
 		self.height
+	}
+
+	pub fn projection(&self) -> Matrix4<f32> {
+		self.projection.clone()
 	}
 }
 

@@ -5,24 +5,19 @@ use byd::{
 
 struct CubeApp {
 	scene: Option<RasterScene>,
-	pipeline: Option<SimplePipeline>,
 }
 
 impl CubeApp {
 	pub fn new() -> Self {
-		Self {
-			scene: None,
-			pipeline: None,
-		}
+		Self { scene: None }
 	}
 }
 
 impl App for CubeApp {
 	fn attach(&mut self, ctx: &mut AttachContext) {
-		let device = ctx.device();
 		let mut scene = RasterScene::new();
 		let cube = Actor {
-			geometry: Box::new(Mesh::cube(0.1)),
+			geometry: Box::new(Mesh::cube(1.0)),
 			material: Material::default(),
 		};
 

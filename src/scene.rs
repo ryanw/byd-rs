@@ -1,7 +1,7 @@
 use crate::pipelines::SimplePipeline;
 use crate::MountContext;
 use crate::{Actor, ActorID, Camera, DrawContext, Drawable, FreeCamera};
-use cgmath::{Point3, Transform};
+use cgmath::{Euler, Matrix4, Point3, Rad, Transform, Vector3};
 use std::mem::size_of;
 use std::{
 	collections::HashMap,
@@ -9,7 +9,31 @@ use std::{
 };
 use wgpu::util::DeviceExt;
 
+#[rustfmt::skip]
+pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
+	1.0, 0.0, 0.0, 0.0,
+	0.0, 1.0, 0.0, 0.0,
+	0.0, 0.0, 0.5, 0.0,
+	0.0, 0.0, 0.5, 1.0,
+);
+
 pub static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+
+struct CameraUniform {
+	pub view: Matrix4<f32>,
+	pub projection: Matrix4<f32>,
+	pub model: Matrix4<f32>,
+}
+
+impl CameraUniform {
+	pub fn as_bytes(&self) -> &[u8] {
+		unsafe {
+			let ptr = self as *const CameraUniform as *const u8;
+			let len = size_of::<Self>();
+			std::slice::from_raw_parts(ptr, len)
+		}
+	}
+}
 
 pub struct RasterScene {
 	camera: FreeCamera,
@@ -17,6 +41,7 @@ pub struct RasterScene {
 	pipeline: Option<SimplePipeline>,
 	bind_group: Option<wgpu::BindGroup>,
 	uniform_buffer: Option<wgpu::Buffer>,
+	rotation: Euler<Rad<f32>>,
 }
 
 impl RasterScene {
@@ -27,31 +52,34 @@ impl RasterScene {
 			bind_group: None,
 			pipeline: None,
 			uniform_buffer: None,
+			rotation: Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
 		}
 	}
 
 	pub fn build_pipeline(&mut self, ctx: &mut DrawContext) {
 		let device = ctx.device();
 
-		let uniform_contents = unsafe {
-			let color = [0.0f32, 0.0, 1.0, 1.0];
-			let len = color.len() * size_of::<f32>();
-			let ptr = color.as_ptr() as *const u8;
-			std::slice::from_raw_parts(ptr, len)
+		let camera_uniform = CameraUniform {
+			view: self.camera.view(),
+			projection: self.camera.projection(),
+			model: Matrix4::from_translation(Vector3::new(0.0, 0.0, -10.0)),
 		};
 		let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Uniform Buffer"),
-			contents: uniform_contents,
+			contents: camera_uniform.as_bytes(),
 			usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
 		});
 
 		let pipeline = SimplePipeline::new(device);
 		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			layout: pipeline.bind_group_layout(),
-			entries: &[wgpu::BindGroupEntry {
-				binding: 0,
-				resource: uniform_buffer.as_entire_binding(),
-			}],
+			layout: pipeline.camera_bind_group_layout(),
+			entries: &[
+				// Camera
+				wgpu::BindGroupEntry {
+					binding: 0,
+					resource: uniform_buffer.as_entire_binding(),
+				},
+			],
 			label: Some("uniform_bind_group"),
 		});
 
@@ -65,15 +93,19 @@ impl RasterScene {
 			self.build_pipeline(ctx);
 		}
 
-		let view = self.camera.view();
+		*self.camera.position_mut() = Point3::new(0.0, 0.0, -10.0);
+		self.rotation.y += Rad(0.05);
+		self.rotation.x += Rad(0.07);
+
+		let camera_uniform = CameraUniform {
+			view: self.camera.view(),
+			projection: self.camera.projection(),
+			model: self.rotation.into(),
+		};
+
 		if let Some(buffer) = self.uniform_buffer.as_ref() {
-			let uniform_contents = unsafe {
-				let color = [1.0f32, 0.0, 1.0, 1.0];
-				let len = color.len() * size_of::<f32>();
-				let ptr = color.as_ptr() as *const u8;
-				std::slice::from_raw_parts(ptr, len)
-			};
-			ctx.queue().write_buffer(buffer, 0, uniform_contents);
+			ctx.queue()
+				.write_buffer(buffer, 0, camera_uniform.as_bytes());
 		}
 
 		if let Some(pipeline) = self.pipeline.as_ref() {
