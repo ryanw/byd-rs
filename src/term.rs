@@ -3,8 +3,25 @@ use std::{thread, time};
 use crate::{App, AttachContext, State};
 use futures::executor::block_on;
 use mutunga::{Cell, Color, Event, TerminalCanvas};
+use winit::dpi::PhysicalSize;
 
 const FPS: u64 = 30;
+
+fn next_pow2(mut n: u32) -> u32 {
+	if n <= 1 {
+		return 1;
+	}
+	let mut p = 2;
+
+	n -= 1;
+	n >>= 1;
+	while n != 0 {
+		p <<= 1;
+		n >>= 1;
+	}
+
+	p
+}
 
 pub struct Term {
 	state: State,
@@ -43,11 +60,13 @@ impl Term {
 		app.attach(&mut AttachContext::new(&mut state));
 
 		let mut term = TerminalCanvas::new();
-		let width = term.width();
-		let height = term.height();
 		term.attach().unwrap();
 
-		'foo: loop {
+		'main: loop {
+			let width = term.width();
+			let height = term.height();
+			let mut tex_width = next_pow2(width);
+			let mut tex_height = next_pow2(height);
 			let current_start = time::Instant::now();
 
 			// Handle terminal events
@@ -55,7 +74,21 @@ impl Term {
 				match event {
 					// Resize our 3D canvas to match the terminal size
 					Event::Resize(width, height) => {
-						// TODO
+						log::debug!("Resized: {}x{}", width, height);
+						tex_width = next_pow2(width);
+						tex_height = next_pow2(height);
+
+						output_buffer.destroy();
+						let output_buffer_size =
+							(4 * tex_width * tex_height) as wgpu::BufferAddress;
+						let output_buffer_desc = wgpu::BufferDescriptor {
+							size: output_buffer_size,
+							usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
+							label: None,
+							mapped_at_creation: false,
+						};
+						output_buffer = state.device.create_buffer(&output_buffer_desc);
+						state.resize(PhysicalSize::new(width, height));
 					}
 					// Ignore any other events
 					_ => {}
@@ -81,10 +114,7 @@ impl Term {
 				// Draw each pixel to the terminal
 				for y in 0..height as usize {
 					for x in 0..width as usize {
-						let i = (x + y * 128) * 4;
-						if x >= 128 || y >= 128 {
-							continue;
-						}
+						let i = (x + y * tex_width as usize) * 4;
 						let r = data[i];
 						let g = data[i + 1];
 						let b = data[i + 2];

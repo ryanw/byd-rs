@@ -9,6 +9,22 @@ use winit::{event::WindowEvent, window::Window as WinitWindow};
 
 use crate::{App, DrawContext};
 
+fn next_pow2(mut n: u32) -> u32 {
+	if n <= 1 {
+		return 1;
+	}
+	let mut p = 2;
+
+	n -= 1;
+	n >>= 1;
+	while n != 0 {
+		p <<= 1;
+		n >>= 1;
+	}
+
+	p
+}
+
 pub type PipelineID = usize;
 pub static NEXT_PIPELINE_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -137,6 +153,27 @@ impl State {
 				}
 			}
 		}
+
+		if self.surface.is_none() {
+			let surface_texture_desc = wgpu::TextureDescriptor {
+				size: wgpu::Extent3d {
+					width: self.size.width,
+					height: self.size.height,
+					depth_or_array_layers: 1,
+				},
+				mip_level_count: 1,
+				sample_count: 1,
+				dimension: wgpu::TextureDimension::D2,
+				format: wgpu::TextureFormat::Bgra8UnormSrgb,
+				usage: wgpu::TextureUsage::COPY_SRC | wgpu::TextureUsage::RENDER_ATTACHMENT,
+				label: None,
+			};
+			let surface_texture = self.device.create_texture(&surface_texture_desc);
+			let surface_texture_view = surface_texture.create_view(&Default::default());
+			self.surface_texture = Some(surface_texture);
+			self.surface_texture_view = Some(surface_texture_view);
+			self.surface_texture_size = Some(surface_texture_desc.size);
+		};
 	}
 
 	pub fn input(&mut self, event: &WindowEvent) -> bool {
@@ -196,6 +233,15 @@ impl State {
 		app: &mut A,
 	) -> Result<(), wgpu::SwapChainError> {
 		let surface_texture_view = self.surface_texture_view.take();
+		let tex_width = next_pow2(self.size.width);
+		let tex_height = next_pow2(self.size.height);
+		log::debug!(
+			"Rendering to buffer: {}x{} => {}x{}",
+			self.size.width,
+			self.size.height,
+			tex_width,
+			tex_height
+		);
 
 		let mut encoder = self
 			.device
@@ -235,9 +281,8 @@ impl State {
 				buffer: &buffer,
 				layout: wgpu::ImageDataLayout {
 					offset: 0,
-					// FIXME use buffer size
-					bytes_per_row: NonZeroU32::new(4 * 128),
-					rows_per_image: NonZeroU32::new(128),
+					bytes_per_row: NonZeroU32::new(4 * tex_width),
+					rows_per_image: NonZeroU32::new(tex_height),
 				},
 			},
 			self.surface_texture_size.unwrap(),
