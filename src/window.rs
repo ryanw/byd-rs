@@ -1,12 +1,6 @@
-use crate::AttachContext;
-use crate::{context::DrawContext, App, Event, Key, MouseButton, UpdateContext};
+use crate::{App, AttachContext, Event, Key, MouseButton, PipelineID, State};
 use futures::executor::block_on;
-use std::{
-	collections::{HashMap, HashSet},
-	error::Error,
-	sync::atomic::{AtomicUsize, Ordering},
-	time::{self, Duration},
-};
+use std::{collections::HashSet, time};
 #[cfg(test)]
 use winit::platform::unix::EventLoopExtUnix;
 #[cfg(target_os = "linux")]
@@ -21,134 +15,10 @@ use winit::{
 	window::{Window as WinitWindow, WindowBuilder},
 };
 
-pub type PipelineID = usize;
-pub static NEXT_PIPELINE_ID: AtomicUsize = AtomicUsize::new(1);
-
-pub struct State {
-	pub surface: wgpu::Surface,
-	pub device: wgpu::Device,
-	pub queue: wgpu::Queue,
-	pub sc_desc: wgpu::SwapChainDescriptor,
-	pub swap_chain: wgpu::SwapChain,
-	pub size: winit::dpi::PhysicalSize<u32>,
-	current_pipeline: Option<PipelineID>,
-	pub(crate) pipelines: HashMap<PipelineID, wgpu::RenderPipeline>,
-}
-
 pub struct Window {
 	event_loop: EventLoop<()>,
 	winit: WinitWindow,
 	state: State,
-}
-
-impl State {
-	async fn new(window: &WinitWindow) -> Self {
-		let size = window.inner_size();
-
-		let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
-		let surface = unsafe { instance.create_surface(window) };
-		let adapter = instance
-			.request_adapter(&wgpu::RequestAdapterOptions {
-				power_preference: wgpu::PowerPreference::default(),
-				compatible_surface: Some(&surface),
-			})
-			.await
-			.unwrap();
-
-		let (device, queue) = adapter
-			.request_device(
-				&wgpu::DeviceDescriptor {
-					features: wgpu::Features::empty(),
-					limits: wgpu::Limits::default(),
-					label: None,
-				},
-				None, // Trace path
-			)
-			.await
-			.unwrap();
-
-		let sc_desc = wgpu::SwapChainDescriptor {
-			usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-			format: adapter.get_swap_chain_preferred_format(&surface).unwrap(),
-			width: size.width,
-			height: size.height,
-			present_mode: wgpu::PresentMode::Fifo,
-		};
-		let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-
-		Self {
-			surface,
-			device,
-			queue,
-			sc_desc,
-			swap_chain,
-			size,
-			pipelines: HashMap::new(),
-			current_pipeline: None,
-		}
-	}
-
-	pub fn add_pipeline(&mut self, pipeline: wgpu::RenderPipeline) -> PipelineID {
-		let id = NEXT_PIPELINE_ID.fetch_add(1, Ordering::Relaxed);
-		self.pipelines.insert(id, pipeline);
-
-		id
-	}
-
-	pub fn use_pipeline(&mut self, id: PipelineID) {
-		self.current_pipeline = Some(id);
-	}
-
-	fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-		self.size = new_size;
-		self.sc_desc.width = new_size.width;
-		self.sc_desc.height = new_size.height;
-		self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
-	}
-
-	fn input(&mut self, event: &WindowEvent) -> bool {
-		false
-	}
-
-	fn update(&mut self) {
-		// remove `todo!()`
-	}
-
-	fn render<A: App>(&mut self, app: &mut A) -> Result<(), wgpu::SwapChainError> {
-		let frame = self.swap_chain.get_current_frame()?.output;
-		let mut encoder = self
-			.device
-			.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-				label: Some("Render Encoder"),
-			});
-		{
-			let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("Render Pass"),
-				color_attachments: &[wgpu::RenderPassColorAttachment {
-					view: &frame.view,
-					resolve_target: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Clear(wgpu::Color {
-							r: 0.2,
-							g: 0.1,
-							b: 0.3,
-							a: 1.0,
-						}),
-						store: true,
-					},
-				}],
-				depth_stencil_attachment: None,
-			});
-
-			let mut ctx = DrawContext::new(self, render_pass);
-			app.draw(&mut ctx);
-		}
-
-		// submit will accept anything that implements IntoIter
-		self.queue.submit(std::iter::once(encoder.finish()));
-
-		Ok(())
-	}
 }
 
 impl Window {
@@ -165,7 +35,7 @@ impl Window {
 		#[cfg(target_os = "linux")]
 		let wb = wb.with_class("".into(), "Byd".into());
 		let window = wb.build(&event_loop).unwrap();
-		let state = block_on(State::new(&window));
+		let state = block_on(State::new(Some(&window)));
 
 		Self {
 			event_loop,

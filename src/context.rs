@@ -1,4 +1,4 @@
-use crate::window::State;
+use crate::State;
 use crate::{ActorID, AsUniformValue, PipelineID, UniformMap};
 use std::time::Duration;
 
@@ -34,7 +34,11 @@ impl<'a> AttachContext<'a> {
 	}
 
 	pub fn swapchain_format(&self) -> wgpu::TextureFormat {
-		self.state.sc_desc.format
+		if let Some(sc_desc) = self.state.sc_desc.as_ref() {
+			sc_desc.format
+		} else {
+			wgpu::TextureFormat::Bgra8UnormSrgb
+		}
 	}
 
 	pub fn add_pipeline(&mut self, pipeline: wgpu::RenderPipeline) -> PipelineID {
