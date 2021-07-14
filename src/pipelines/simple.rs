@@ -1,6 +1,4 @@
 use crate::{SimpleVertex, Vertex};
-use std::mem::size_of;
-use wgpu::util::DeviceExt;
 
 pub struct SimplePipeline {
 	render_pipeline: wgpu::RenderPipeline,

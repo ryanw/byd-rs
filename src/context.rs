@@ -10,7 +10,8 @@ pub struct DrawContext<'a> {
 	pub(crate) dt: Duration,
 	pub(crate) uniforms: UniformMap,
 	pub(crate) viewport_size: (f32, f32),
-	pub(crate) state: &'a mut State,
+	pub(crate) device: &'a wgpu::Device,
+	pub(crate) queue: &'a mut wgpu::Queue,
 	render_pass: wgpu::RenderPass<'a>,
 }
 
@@ -40,19 +41,20 @@ impl<'a> AttachContext<'a> {
 			wgpu::TextureFormat::Bgra8UnormSrgb
 		}
 	}
-
-	pub fn add_pipeline(&mut self, pipeline: wgpu::RenderPipeline) -> PipelineID {
-		self.state.add_pipeline(pipeline)
-	}
 }
 
 impl<'a> DrawContext<'a> {
-	pub fn new(state: &'a mut State, render_pass: wgpu::RenderPass<'a>) -> Self {
+	pub fn new(
+		device: &'a wgpu::Device,
+		queue: &'a mut wgpu::Queue,
+		render_pass: wgpu::RenderPass<'a>,
+	) -> Self {
 		Self {
 			dt: Duration::default(),
 			uniforms: UniformMap::new(),
 			viewport_size: (0.0, 0.0),
-			state,
+			device,
+			queue,
 			render_pass,
 		}
 	}
@@ -66,28 +68,15 @@ impl<'a> DrawContext<'a> {
 	}
 
 	pub fn queue(&self) -> &wgpu::Queue {
-		&self.state.queue
+		self.queue
 	}
 
 	pub fn queue_mut(&mut self) -> &mut wgpu::Queue {
-		&mut self.state.queue
+		self.queue
 	}
 
 	pub fn device(&self) -> &wgpu::Device {
-		&self.state.device
-	}
-
-	pub fn pipeline(&self, id: PipelineID) -> Option<&wgpu::RenderPipeline> {
-		self.state.pipelines.get(&id)
-	}
-
-	pub fn clear_color(&mut self, r: f32, g: f32, b: f32, a: f32) {
-		todo!();
-	}
-
-	pub fn use_pipeline(&mut self, id: PipelineID) {
-		log::debug!("Changing render pipeline to : {}", id);
-		self.state.use_pipeline(id);
+		self.device
 	}
 
 	pub fn insert_uniform(&mut self, name: &str, value: impl AsUniformValue) {

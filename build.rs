@@ -34,7 +34,7 @@ impl ShaderData {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-	// Collect all shaders recursively within /src/
+	// Collect all shaders recursively within /shaders/
 	let mut shader_paths = [
 		glob("./shaders/**/*.vert.glsl")?,
 		glob("./shaders/**/*.frag.glsl")?,
@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	// be better just to only compile shaders that have been changed
 	// recently.
 	for shader in shaders {
-		// This tells cargo to rerun this script if something in /src/ changes.
+		// This tells cargo to rerun this script if something in /shaders/ changes.
 		println!(
 			"cargo:rerun-if-changed={}",
 			shader.src_path.as_os_str().to_str().unwrap()
@@ -71,7 +71,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 			"main",
 			None,
 		)?;
-		println!("Writing shader to: {:?}", shader.spv_path);
 		write(shader.spv_path, compiled.as_binary_u8())?;
 	}
 
