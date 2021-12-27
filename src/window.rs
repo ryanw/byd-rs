@@ -69,12 +69,7 @@ impl Window {
 					state.update();
 					match state.render(&mut app) {
 						Ok(_) => {}
-						// Recreate the swap_chain if lost
-						Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
-						// The system is out of memory, we should probably quit
-						Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-						// All other errors (Outdated, Timeout) should be resolved by the next frame
-						Err(e) => eprintln!("{:?}", e),
+						Err(e) => eprintln!("Render error: {:?}", e),
 					}
 
 					window.request_redraw();

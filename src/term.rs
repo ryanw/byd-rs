@@ -37,7 +37,7 @@ impl Term {
 		let output_buffer_size = (4 * size.0 * size.1) as wgpu::BufferAddress;
 		let output_buffer_desc = wgpu::BufferDescriptor {
 			size: output_buffer_size,
-			usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
+			usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
 			label: None,
 			mapped_at_creation: false,
 		};
@@ -83,7 +83,7 @@ impl Term {
 							(4 * tex_width * tex_height) as wgpu::BufferAddress;
 						let output_buffer_desc = wgpu::BufferDescriptor {
 							size: output_buffer_size,
-							usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::MAP_READ,
+							usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
 							label: None,
 							mapped_at_creation: false,
 						};

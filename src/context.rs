@@ -33,14 +33,6 @@ impl<'a> AttachContext<'a> {
 		&self.state.device
 	}
 
-	pub fn swapchain_format(&self) -> wgpu::TextureFormat {
-		if let Some(sc_desc) = self.state.sc_desc.as_ref() {
-			sc_desc.format
-		} else {
-			wgpu::TextureFormat::Bgra8UnormSrgb
-		}
-	}
-
 	pub fn add_pipeline(&mut self, pipeline: wgpu::RenderPipeline) -> PipelineID {
 		self.state.add_pipeline(pipeline)
 	}

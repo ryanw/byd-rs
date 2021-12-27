@@ -17,7 +17,7 @@ impl Vertex for SimpleVertex {
 	fn buffer_layout<'a>() -> ::wgpu::VertexBufferLayout<'a> {
 		wgpu::VertexBufferLayout {
 			array_stride: size_of::<Self>() as _,
-			step_mode: wgpu::InputStepMode::Vertex,
+			step_mode: wgpu::VertexStepMode::Vertex,
 			attributes: &[
 				wgpu::VertexAttribute {
 					offset: 0,
@@ -96,7 +96,7 @@ impl<V: Vertex> Mesh<V> {
 		let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
 			label: Some("Mesh Vertex Buffer"),
 			contents,
-			usage: wgpu::BufferUsage::VERTEX,
+			usage: wgpu::BufferUsages::VERTEX,
 		});
 		self.buffer = Some(vertex_buffer);
 		Ok(())

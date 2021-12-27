@@ -67,7 +67,7 @@ impl RasterScene {
 		let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Uniform Buffer"),
 			contents: camera_uniform.as_bytes(),
-			usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 		});
 
 		let pipeline = SimplePipeline::new(device);

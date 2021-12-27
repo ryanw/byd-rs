@@ -1,6 +1,4 @@
 use crate::{SimpleVertex, Vertex};
-use std::mem::size_of;
-use wgpu::util::DeviceExt;
 
 pub struct SimplePipeline {
 	render_pipeline: wgpu::RenderPipeline,
@@ -16,7 +14,7 @@ impl SimplePipeline {
 					// Camera
 					wgpu::BindGroupLayoutEntry {
 						binding: 0,
-						visibility: wgpu::ShaderStage::VERTEX,
+						visibility: wgpu::ShaderStages::VERTEX,
 						ty: wgpu::BindingType::Buffer {
 							ty: wgpu::BufferBindingType::Uniform,
 							has_dynamic_offset: false,
@@ -30,11 +28,17 @@ impl SimplePipeline {
 
 		// Shader
 		log::debug!("Creating vertex shader");
-		let vs_module =
-			device.create_shader_module(&wgpu::include_spirv!("../../shaders/simple.vert.spv"));
+		let vs_module = unsafe {
+			device.create_shader_module_spirv(&wgpu::include_spirv_raw!(
+				"../../shaders/simple.vert.spv"
+			))
+		};
 		log::debug!("Creating fragment shader");
-		let fs_module =
-			device.create_shader_module(&wgpu::include_spirv!("../../shaders/simple.frag.spv"));
+		let fs_module = unsafe {
+			device.create_shader_module_spirv(&wgpu::include_spirv_raw!(
+				"../../shaders/simple.frag.spv"
+			))
+		};
 
 		log::debug!("Creating pipeline layout");
 		let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -58,7 +62,7 @@ impl SimplePipeline {
 				targets: &[wgpu::ColorTargetState {
 					format: wgpu::TextureFormat::Bgra8UnormSrgb, // FIXME ctx.swapchain_format(),
 					blend: Some(wgpu::BlendState::REPLACE),
-					write_mask: wgpu::ColorWrite::ALL,
+					write_mask: wgpu::ColorWrites::ALL,
 				}],
 			}),
 			primitive: wgpu::PrimitiveState {
@@ -66,9 +70,9 @@ impl SimplePipeline {
 				strip_index_format: None,
 				front_face: wgpu::FrontFace::Ccw,
 				cull_mode: Some(wgpu::Face::Back),
-				clamp_depth: false,
 				conservative: false,
 				polygon_mode: wgpu::PolygonMode::Fill,
+				unclipped_depth: false,
 			},
 			depth_stencil: None,
 			multisample: wgpu::MultisampleState {
@@ -76,6 +80,7 @@ impl SimplePipeline {
 				mask: !0,
 				alpha_to_coverage_enabled: false,
 			},
+			multiview: None,
 		});
 
 		Self {
