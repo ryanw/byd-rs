@@ -5,7 +5,7 @@ use std::{
 	sync::atomic::{AtomicUsize, Ordering},
 };
 use winit::dpi::PhysicalSize;
-#[cfg(target_os = "linux")]
+//#[cfg(target_os = "linux")]
 use winit::{event::WindowEvent, window::Window as WinitWindow};
 
 use crate::{App, DrawContext};
@@ -59,12 +59,6 @@ impl State {
 			.await
 			.expect("Failed to request adapter");
 
-		let size = match window {
-			Some(window) => window.inner_size(),
-			// FIXME get term size
-			None => PhysicalSize::new(128, 128),
-		};
-
 		let (device, queue) = adapter
 			.request_device(
 				&wgpu::DeviceDescriptor {
@@ -77,7 +71,13 @@ impl State {
 			.await
 			.expect("Failed to request device");
 
-		let surface_config = if let Some(surface) = surface.as_ref() {
+		let size = match window {
+			Some(window) => window.inner_size(),
+			// FIXME get term size
+			None => PhysicalSize::new(128, 128),
+		};
+
+		let surface_config = surface.as_ref().map(|surface| {
 			let config = wgpu::SurfaceConfiguration {
 				usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 				format: surface
@@ -88,10 +88,8 @@ impl State {
 				present_mode: wgpu::PresentMode::Fifo,
 			};
 			surface.configure(&device, &config);
-			Some(config)
-		} else {
-			None
-		};
+			config
+		});
 
 		let (surface_texture, surface_texture_view, surface_texture_size) = if surface.is_none() {
 			let surface_texture_desc = wgpu::TextureDescriptor {

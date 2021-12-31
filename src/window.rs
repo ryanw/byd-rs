@@ -65,14 +65,16 @@ impl Window {
 		event_loop.run(move |event, _, control_flow| {
 			*control_flow = ControlFlow::Poll;
 			match event {
+				WinitEvent::RedrawEventsCleared => {
+					window.request_redraw();
+				}
+
 				WinitEvent::RedrawRequested(_) => {
 					state.update();
 					match state.render(&mut app) {
 						Ok(_) => {}
 						Err(e) => eprintln!("Render error: {:?}", e),
 					}
-
-					window.request_redraw();
 				}
 
 				WinitEvent::DeviceEvent { event, .. } => match event {
