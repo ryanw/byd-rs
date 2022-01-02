@@ -27,18 +27,11 @@ impl SimplePipeline {
 			});
 
 		// Shader
-		log::debug!("Creating vertex shader");
-		let vs_module = unsafe {
-			device.create_shader_module_spirv(&wgpu::include_spirv_raw!(
-				"../../shaders/simple.vert.spv"
-			))
-		};
-		log::debug!("Creating fragment shader");
-		let fs_module = unsafe {
-			device.create_shader_module_spirv(&wgpu::include_spirv_raw!(
-				"../../shaders/simple.frag.spv"
-			))
-		};
+		log::debug!("Creating Simple shader");
+		let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+			label: Some("Simple Shader"),
+			source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/simple.wgsl").into()),
+		});
 
 		log::debug!("Creating pipeline layout");
 		let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -52,13 +45,13 @@ impl SimplePipeline {
 			label: Some("Cube Render Pipeline"),
 			layout: Some(&pipeline_layout),
 			vertex: wgpu::VertexState {
-				module: &vs_module,
-				entry_point: "main",
+				module: &shader_module,
+				entry_point: "vs_main",
 				buffers: &[SimpleVertex::buffer_layout()],
 			},
 			fragment: Some(wgpu::FragmentState {
-				module: &fs_module,
-				entry_point: "main",
+				module: &shader_module,
+				entry_point: "fs_main",
 				targets: &[wgpu::ColorTargetState {
 					format: wgpu::TextureFormat::Bgra8UnormSrgb, // FIXME ctx.swapchain_format(),
 					blend: Some(wgpu::BlendState::REPLACE),
