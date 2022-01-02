@@ -11,7 +11,9 @@ log = "0.4"
 env_logger = "0.9"
 futures = "0.3.15"
 downcast-rs = "1.2.0"
-#mutunga = { path = "../mutunga" }
+
+[target.'cfg(unix)'.dependencies]
+mutunga = { path = "../mutunga" }
 
 [build-dependencies]
 glob = "0.3"

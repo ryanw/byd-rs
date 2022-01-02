@@ -5,7 +5,6 @@ use std::{
 	sync::atomic::{AtomicUsize, Ordering},
 };
 use winit::dpi::PhysicalSize;
-//#[cfg(target_os = "linux")]
 use winit::{event::WindowEvent, window::Window as WinitWindow};
 
 use crate::{App, DrawContext};
