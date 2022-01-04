@@ -1,7 +1,7 @@
 use crate::pipelines::SimplePipeline;
 use crate::MountContext;
 use crate::{Actor, ActorID, Camera, DrawContext, Drawable, FreeCamera};
-use cgmath::{Euler, Matrix4, Point3, Rad, Transform, Vector3};
+use cgmath::{Matrix4, Point3, SquareMatrix, Vector3};
 use std::mem::size_of;
 use std::{
 	collections::HashMap,
@@ -18,6 +18,12 @@ pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
 );
 
 pub static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+
+pub struct ActorPod {
+	pub id: ActorID,
+	pub actor: Actor,
+	uniform_offset: usize,
+}
 
 struct CameraUniform {
 	pub view: Matrix4<f32>,
@@ -37,11 +43,10 @@ impl CameraUniform {
 
 pub struct RasterScene {
 	camera: FreeCamera,
-	actors: HashMap<ActorID, Actor>,
+	actors: HashMap<ActorID, ActorPod>,
 	pipeline: Option<SimplePipeline>,
 	bind_group: Option<wgpu::BindGroup>,
 	uniform_buffer: Option<wgpu::Buffer>,
-	rotation: Euler<Rad<f32>>,
 }
 
 impl RasterScene {
@@ -52,23 +57,23 @@ impl RasterScene {
 			bind_group: None,
 			pipeline: None,
 			uniform_buffer: None,
-			rotation: Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
 		}
 	}
 
 	pub fn build_pipeline(&mut self, ctx: &mut DrawContext) {
 		let device = ctx.device();
 
-		let camera_uniform = CameraUniform {
-			view: self.camera.view(),
-			projection: self.camera.projection(),
-			model: Matrix4::from_translation(Vector3::new(0.0, 0.0, -10.0)),
-		};
-		let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		let uniform_alignment =
+			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+
+		let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
 			label: Some("Uniform Buffer"),
-			contents: camera_uniform.as_bytes(),
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: 1000 * uniform_alignment,
+			mapped_at_creation: false,
 		});
+
+		let uniform_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
 
 		let pipeline = SimplePipeline::new(device);
 		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -77,7 +82,11 @@ impl RasterScene {
 				// Camera
 				wgpu::BindGroupEntry {
 					binding: 0,
-					resource: uniform_buffer.as_entire_binding(),
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &uniform_buffer,
+						offset: 0,
+						size: wgpu::BufferSize::new(uniform_size),
+					}),
 				},
 			],
 			label: Some("uniform_bind_group"),
@@ -94,44 +103,62 @@ impl RasterScene {
 		}
 
 		*self.camera.position_mut() = Point3::new(0.0, 0.0, -10.0);
-		self.rotation.y += Rad(0.05);
-		self.rotation.x += Rad(0.07);
 
-		let camera_uniform = CameraUniform {
+		let mut camera_uniform = CameraUniform {
 			view: self.camera.view(),
 			projection: self.camera.projection(),
-			model: self.rotation.into(),
+			model: Matrix4::identity(),
 		};
-
-		if let Some(buffer) = self.uniform_buffer.as_ref() {
-			ctx.queue()
-				.write_buffer(buffer, 0, camera_uniform.as_bytes());
-		}
 
 		if let Some(pipeline) = self.pipeline.as_ref() {
 			pipeline.apply(ctx.render_pass_mut());
 		}
 
-		if let Some(bind_group) = self.bind_group.as_ref() {
-			ctx.render_pass_mut().set_bind_group(0, bind_group, &[]);
-		}
+		let device = ctx.device();
+		let uniform_alignment =
+			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
 
-		for (_id, actor) in &mut self.actors {
-			actor.draw(ctx)
+		for ActorPod {
+			actor,
+			uniform_offset,
+			..
+		} in self.actors.values_mut()
+		{
+			camera_uniform.model = actor.transform.clone();
+			let offset = (*uniform_offset * uniform_alignment as usize) as wgpu::DynamicOffset;
+			if let Some(buffer) = self.uniform_buffer.as_ref() {
+				// FIXME split camera and actor uniforms
+				ctx.queue()
+					.write_buffer(buffer, offset as _, camera_uniform.as_bytes());
+			}
+
+			if let Some(bind_group) = self.bind_group.as_ref() {
+				ctx.render_pass_mut()
+					.set_bind_group(0, bind_group, &[offset]);
+			}
+			actor.draw(ctx);
 		}
 	}
 
 	pub fn add(&mut self, mut actor: Actor) {
 		let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+		let uniform_offset = self.actors.len();
 		let mut ctx = MountContext { actor_id: id };
 		actor.mount(&mut ctx);
-		self.actors.insert(id, actor);
+		self.actors.insert(
+			id,
+			ActorPod {
+				id,
+				actor,
+				uniform_offset,
+			},
+		);
 	}
 
 	pub fn remove(&mut self, id: ActorID) {
-		if let Some(mut actor) = self.actors.remove(&id) {
+		if let Some(mut pod) = self.actors.remove(&id) {
 			let mut ctx = MountContext { actor_id: id };
-			actor.unmount(&mut ctx);
+			pod.actor.unmount(&mut ctx);
 		}
 	}
 
@@ -146,12 +173,12 @@ impl RasterScene {
 	}
 
 	/// Get a reference to the scene's actors.
-	pub fn actors(&self) -> &HashMap<ActorID, Actor> {
+	pub fn actors(&self) -> &HashMap<ActorID, ActorPod> {
 		&self.actors
 	}
 
 	/// Get a mutable reference to the scene's actors.
-	pub fn actors_mut(&mut self) -> &mut HashMap<ActorID, Actor> {
+	pub fn actors_mut(&mut self) -> &mut HashMap<ActorID, ActorPod> {
 		&mut self.actors
 	}
 }

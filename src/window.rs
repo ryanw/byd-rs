@@ -1,6 +1,9 @@
-use crate::{App, AttachContext, Event, Key, MouseButton, PipelineID, State};
+use crate::{App, AttachContext, Event, Key, MouseButton, State, UpdateContext};
 use futures::executor::block_on;
-use std::{collections::HashSet, time};
+use std::{
+	collections::HashSet,
+	time::{self, Duration, Instant},
+};
 #[cfg(test)]
 use winit::platform::unix::EventLoopExtUnix;
 #[cfg(target_os = "linux")]
@@ -29,7 +32,7 @@ impl Window {
 		let event_loop = EventLoop::new_any_thread();
 
 		let wb = WindowBuilder::new()
-			.with_inner_size(PhysicalSize::new(1920, 1080))
+			.with_inner_size(PhysicalSize::new(1280, 720))
 			.with_title("Test WGPU")
 			.with_transparent(false);
 		#[cfg(target_os = "linux")]
@@ -61,7 +64,7 @@ impl Window {
 
 		let mut mouse_pos = (0.0, 0.0);
 		let start_at = time::Instant::now();
-		let mut last_frame_at = time::Instant::now();
+		let mut last_update_at = Instant::now();
 		event_loop.run(move |event, _, control_flow| {
 			*control_flow = ControlFlow::Poll;
 			match event {
@@ -71,6 +74,11 @@ impl Window {
 
 				WinitEvent::RedrawRequested(_) => {
 					state.update();
+					let mut ctx = UpdateContext {
+						dt: last_update_at.elapsed(),
+					};
+					last_update_at = Instant::now();
+					app.update(&mut ctx);
 					match state.render(&mut app) {
 						Ok(_) => {}
 						Err(e) => eprintln!("Render error: {:?}", e),

@@ -86,7 +86,7 @@ impl<V: Vertex> Mesh<V> {
 	}
 
 	pub fn upload(&mut self, device: &wgpu::Device) -> Result<(), Box<dyn Error>> {
-		println!("Uploading mesh");
+		log::debug!("Uploading mesh to GPU");
 		self.uploaded = true;
 		let contents = unsafe {
 			let len = self.vertices.len() * size_of::<V>();

@@ -1,8 +1,10 @@
 use crate::{DrawContext, Drawable, Material, MountContext};
+use cgmath::Matrix4;
 
 pub struct Actor {
 	pub geometry: Box<dyn Drawable>,
 	pub material: Material,
+	pub transform: Matrix4<f32>,
 }
 
 impl Drawable for Actor {
