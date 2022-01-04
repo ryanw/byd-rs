@@ -26,9 +26,6 @@ pub use mesh::*;
 pub mod uniforms;
 pub use uniforms::*;
 
-pub mod pipeline;
-pub use pipeline::*;
-
 pub mod event;
 pub use event::*;
 

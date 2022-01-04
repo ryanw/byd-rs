@@ -1,13 +1,14 @@
-use crate::pipelines::SimplePipeline;
+use crate::pipelines::{ActorUniform, CameraUniform, SimplePipeline, Uniform};
 use crate::MountContext;
 use crate::{Actor, ActorID, Camera, DrawContext, Drawable, FreeCamera};
-use cgmath::{Matrix4, Point3, SquareMatrix, Vector3};
+use cgmath::{Matrix4, Point3, SquareMatrix};
 use std::mem::size_of;
 use std::{
 	collections::HashMap,
 	sync::atomic::{AtomicUsize, Ordering},
 };
-use wgpu::util::DeviceExt;
+
+const MAX_ACTORS: u64 = 1024;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
@@ -25,28 +26,13 @@ pub struct ActorPod {
 	uniform_offset: usize,
 }
 
-struct CameraUniform {
-	pub view: Matrix4<f32>,
-	pub projection: Matrix4<f32>,
-	pub model: Matrix4<f32>,
-}
-
-impl CameraUniform {
-	pub fn as_bytes(&self) -> &[u8] {
-		unsafe {
-			let ptr = self as *const CameraUniform as *const u8;
-			let len = size_of::<Self>();
-			std::slice::from_raw_parts(ptr, len)
-		}
-	}
-}
-
 pub struct RasterScene {
 	camera: FreeCamera,
 	actors: HashMap<ActorID, ActorPod>,
 	pipeline: Option<SimplePipeline>,
 	bind_group: Option<wgpu::BindGroup>,
-	uniform_buffer: Option<wgpu::Buffer>,
+	camera_uniform_buffer: Option<wgpu::Buffer>,
+	actor_uniform_buffer: Option<wgpu::Buffer>,
 }
 
 impl RasterScene {
@@ -56,7 +42,8 @@ impl RasterScene {
 			actors: HashMap::new(),
 			bind_group: None,
 			pipeline: None,
-			uniform_buffer: None,
+			camera_uniform_buffer: None,
+			actor_uniform_buffer: None,
 		}
 	}
 
@@ -66,26 +53,43 @@ impl RasterScene {
 		let uniform_alignment =
 			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
 
-		let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Uniform Buffer"),
+		let camera_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Camera Uniform Buffer"),
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size: 1000 * uniform_alignment,
+			size: uniform_alignment,
 			mapped_at_creation: false,
 		});
 
-		let uniform_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
+		let actor_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Actor Uniform Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: MAX_ACTORS * uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let camera_uniform_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
+		let actor_uniform_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
 
 		let pipeline = SimplePipeline::new(device);
 		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			layout: pipeline.camera_bind_group_layout(),
+			layout: pipeline.bind_group_layout(),
 			entries: &[
 				// Camera
 				wgpu::BindGroupEntry {
 					binding: 0,
 					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-						buffer: &uniform_buffer,
+						buffer: &camera_uniform_buffer,
 						offset: 0,
-						size: wgpu::BufferSize::new(uniform_size),
+						size: wgpu::BufferSize::new(camera_uniform_size),
+					}),
+				},
+				// Actor
+				wgpu::BindGroupEntry {
+					binding: 1,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &actor_uniform_buffer,
+						offset: 0,
+						size: wgpu::BufferSize::new(actor_uniform_size),
 					}),
 				},
 			],
@@ -94,7 +98,8 @@ impl RasterScene {
 
 		self.pipeline = Some(pipeline);
 		self.bind_group = Some(bind_group);
-		self.uniform_buffer = Some(uniform_buffer);
+		self.camera_uniform_buffer = Some(camera_uniform_buffer);
+		self.actor_uniform_buffer = Some(actor_uniform_buffer);
 	}
 
 	pub fn draw<'a>(&'a mut self, ctx: &mut DrawContext<'a>) {
@@ -104,11 +109,15 @@ impl RasterScene {
 
 		*self.camera.position_mut() = Point3::new(0.0, 0.0, -10.0);
 
-		let mut camera_uniform = CameraUniform {
-			view: self.camera.view(),
-			projection: self.camera.projection(),
-			model: Matrix4::identity(),
-		};
+		// Update camera position
+		if let Some(buffer) = self.camera_uniform_buffer.as_ref() {
+			let camera_uniform = CameraUniform {
+				view: self.camera.view(),
+				projection: self.camera.projection(),
+			};
+			ctx.queue()
+				.write_buffer(buffer, 0, camera_uniform.as_bytes());
+		}
 
 		if let Some(pipeline) = self.pipeline.as_ref() {
 			pipeline.apply(ctx.render_pass_mut());
@@ -124,17 +133,20 @@ impl RasterScene {
 			..
 		} in self.actors.values_mut()
 		{
-			camera_uniform.model = actor.transform.clone();
-			let offset = (*uniform_offset * uniform_alignment as usize) as wgpu::DynamicOffset;
-			if let Some(buffer) = self.uniform_buffer.as_ref() {
-				// FIXME split camera and actor uniforms
-				ctx.queue()
-					.write_buffer(buffer, offset as _, camera_uniform.as_bytes());
-			}
+			// Update actor position
+			if let Some(buffer) = self.actor_uniform_buffer.as_ref() {
+				let actor_uniform = ActorUniform {
+					model: actor.transform.clone(),
+				};
+				let offset = (*uniform_offset * uniform_alignment as usize) as wgpu::DynamicOffset;
 
-			if let Some(bind_group) = self.bind_group.as_ref() {
-				ctx.render_pass_mut()
-					.set_bind_group(0, bind_group, &[offset]);
+				ctx.queue()
+					.write_buffer(buffer, offset as _, actor_uniform.as_bytes());
+
+				if let Some(bind_group) = self.bind_group.as_ref() {
+					ctx.render_pass_mut()
+						.set_bind_group(0, bind_group, &[offset]);
+				}
 			}
 			actor.draw(ctx);
 		}

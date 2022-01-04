@@ -1,30 +1,57 @@
+use super::Uniform;
 use crate::{SimpleVertex, Vertex};
+use cgmath::Matrix4;
+
+const CAMERA_BINDING: u32 = 0;
+const ACTOR_BINDING: u32 = 1;
+
+pub struct CameraUniform {
+	pub view: Matrix4<f32>,
+	pub projection: Matrix4<f32>,
+}
+
+impl Uniform for CameraUniform {}
+
+pub struct ActorUniform {
+	pub model: Matrix4<f32>,
+}
+impl Uniform for ActorUniform {}
 
 pub struct SimplePipeline {
 	render_pipeline: wgpu::RenderPipeline,
-	camera_bind_group_layout: wgpu::BindGroupLayout,
+	bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl SimplePipeline {
 	pub fn new(device: &wgpu::Device) -> Self {
 		// Uniforms
-		let camera_bind_group_layout =
-			device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-				entries: &[
-					// Camera
-					wgpu::BindGroupLayoutEntry {
-						binding: 0,
-						visibility: wgpu::ShaderStages::VERTEX,
-						ty: wgpu::BindingType::Buffer {
-							ty: wgpu::BufferBindingType::Uniform,
-							has_dynamic_offset: true,
-							min_binding_size: None,
-						},
-						count: None,
+		let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("SimplePipeline Bind Group Layout"),
+			entries: &[
+				// Camera
+				wgpu::BindGroupLayoutEntry {
+					binding: CAMERA_BINDING,
+					visibility: wgpu::ShaderStages::VERTEX,
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Uniform,
+						has_dynamic_offset: false,
+						min_binding_size: None,
 					},
-				],
-				label: Some("Camera Bind Group Layout"),
-			});
+					count: None,
+				},
+				// Actor
+				wgpu::BindGroupLayoutEntry {
+					binding: ACTOR_BINDING,
+					visibility: wgpu::ShaderStages::VERTEX,
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Uniform,
+						has_dynamic_offset: true,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+			],
+		});
 
 		// Shader
 		log::debug!("Creating Simple shader");
@@ -36,7 +63,7 @@ impl SimplePipeline {
 		log::debug!("Creating pipeline layout");
 		let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Render Pipeline Layout"),
-			bind_group_layouts: &[&camera_bind_group_layout],
+			bind_group_layouts: &[&bind_group_layout],
 			push_constant_ranges: &[],
 		});
 
@@ -78,7 +105,7 @@ impl SimplePipeline {
 
 		Self {
 			render_pipeline: pipeline,
-			camera_bind_group_layout,
+			bind_group_layout,
 		}
 	}
 
@@ -87,7 +114,7 @@ impl SimplePipeline {
 	}
 
 	/// Get a reference to the simple pipeline's bind group layout.
-	pub fn camera_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-		&self.camera_bind_group_layout
+	pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+		&self.bind_group_layout
 	}
 }
