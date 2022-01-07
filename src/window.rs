@@ -1,5 +1,4 @@
 use crate::{App, AttachContext, Event, Key, MouseButton, State, UpdateContext};
-use futures::executor::block_on;
 use std::{
 	collections::HashSet,
 	time::{self, Duration, Instant},
@@ -14,49 +13,39 @@ use winit::{
 		DeviceEvent, ElementState, Event as WinitEvent, KeyboardInput, MouseScrollDelta,
 		WindowEvent,
 	},
-	event_loop::{ControlFlow, EventLoop},
+	event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
 	window::{Window as WinitWindow, WindowBuilder},
 };
 
 pub struct Window {
-	event_loop: EventLoop<()>,
-	winit: WinitWindow,
-	state: State,
+	event_loop: EventLoop<Event>,
+	pub(crate) winit: WinitWindow,
 }
 
 impl Window {
-	pub fn new() -> Self {
-		#[cfg(not(test))]
-		let event_loop = EventLoop::new();
-		#[cfg(test)]
-		let event_loop = EventLoop::new_any_thread();
+	pub fn new(width: u32, height: u32) -> Self {
+		let event_loop: EventLoop<Event> = EventLoop::with_user_event();
 
 		let wb = WindowBuilder::new()
-			.with_inner_size(PhysicalSize::new(1280, 720))
+			.with_inner_size(PhysicalSize::new(width, height))
 			.with_title("Test WGPU")
 			.with_transparent(false);
 		#[cfg(target_os = "linux")]
 		let wb = wb.with_class("".into(), "Byd".into());
 		let window = wb.build(&event_loop).unwrap();
-		let state = block_on(State::new(Some(&window)));
 
 		Self {
 			event_loop,
 			winit: window,
-			state,
 		}
 	}
 
-	pub fn device(&self) -> &wgpu::Device {
-		&self.state.device
-	}
-
-	pub fn run(self, mut app: impl App + 'static) {
+	pub fn run<F>(self, mut event_handler: F)
+	where
+		F: 'static + FnMut(Event, &mut ControlFlow),
+	{
 		let event_loop = self.event_loop;
 		let window = self.winit;
-		let mut state = self.state;
-
-		app.attach(&mut AttachContext::new(&mut state));
 
 		let grabbed = false;
 		let mut held_keys: HashSet<Key> = HashSet::new();
@@ -65,6 +54,7 @@ impl Window {
 		let mut mouse_pos = (0.0, 0.0);
 		let start_at = time::Instant::now();
 		let mut last_update_at = Instant::now();
+		let event_proxy = event_loop.create_proxy();
 		event_loop.run(move |event, _, control_flow| {
 			*control_flow = ControlFlow::Poll;
 			match event {
@@ -73,25 +63,23 @@ impl Window {
 				}
 
 				WinitEvent::RedrawRequested(_) => {
-					state.update();
-					let mut ctx = UpdateContext {
-						dt: last_update_at.elapsed(),
-					};
+					event_proxy
+						.send_event(Event::Draw(last_update_at.elapsed()))
+						.expect("Failed to send event");
 					last_update_at = Instant::now();
-					app.update(&mut ctx);
-					match state.render(&mut app) {
-						Ok(_) => {}
-						Err(e) => eprintln!("Render error: {:?}", e),
-					}
 				}
 
 				WinitEvent::DeviceEvent { event, .. } => match event {
 					DeviceEvent::MouseMotion { delta: (x, y) } => {
 						if grabbed {
-							app.event(&Event::MouseMotion(x as _, y as _));
+							event_proxy
+								.send_event(Event::MouseMotion(x as _, y as _))
+								.expect("Failed to send event");
 						}
 						for button in &held_buttons {
-							app.event(&Event::MouseDrag(button.clone(), x as _, y as _));
+							event_proxy
+								.send_event(Event::MouseDrag(button.clone(), x as _, y as _))
+								.expect("Failed to send event");
 						}
 					}
 					_ => {}
@@ -100,39 +88,47 @@ impl Window {
 				WinitEvent::WindowEvent { event, .. } => match event {
 					WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
 					WindowEvent::Resized(size) => {
-						state.resize(size);
-						// FIXME resize wgpu surface
-						app.event(&Event::WindowResize(size.width, size.height));
+						event_proxy
+							.send_event(Event::WindowResize(size.width, size.height))
+							.expect("Failed to send event");
 					}
 
 					WindowEvent::CursorMoved { position, .. } => {
 						mouse_pos = (position.x, position.y);
-						app.event(&Event::MouseMove(position.x as _, position.y as _));
+						event_proxy
+							.send_event(Event::MouseMove(position.x as _, position.y as _))
+							.expect("Failed to send event");
 					}
 
 					WindowEvent::MouseWheel {
 						delta: MouseScrollDelta::LineDelta(x, y),
 						..
 					} => {
-						app.event(&Event::MouseWheel(x, y));
+						event_proxy
+							.send_event(Event::MouseWheel(x, y))
+							.expect("Failed to send event");
 					}
 
 					WindowEvent::MouseInput { state, button, .. } => match state {
 						ElementState::Pressed => {
 							held_buttons.insert(button.into());
-							app.event(&Event::MouseDown(
-								button.into(),
-								mouse_pos.0 as _,
-								mouse_pos.1 as _,
-							));
+							event_proxy
+								.send_event(Event::MouseDown(
+									button.into(),
+									mouse_pos.0 as _,
+									mouse_pos.1 as _,
+								))
+								.expect("Failed to send event");
 						}
 						ElementState::Released => {
 							held_buttons.remove(&button.into());
-							app.event(&Event::MouseUp(
-								button.into(),
-								mouse_pos.0 as _,
-								mouse_pos.1 as _,
-							));
+							event_proxy
+								.send_event(Event::MouseUp(
+									button.into(),
+									mouse_pos.0 as _,
+									mouse_pos.1 as _,
+								))
+								.expect("Failed to send event");
 						}
 					},
 
@@ -146,19 +142,25 @@ impl Window {
 						..
 					} => {
 						if let Some(keycode) = virtual_keycode {
-							let key: Key = keycode.into();
+							let key = keycode.into();
 							let is_repeat = held_keys.contains(&key);
 							held_keys.insert(key.clone());
 							if is_repeat {
-								app.event(&Event::KeyRepeat(key));
+								event_proxy
+									.send_event(Event::KeyRepeat(key))
+									.expect("Failed to send event");
 							} else {
-								app.event(&Event::KeyDown(key));
+								event_proxy
+									.send_event(Event::KeyDown(key))
+									.expect("Failed to send event");
 							}
 						}
 					}
 
 					WindowEvent::ReceivedCharacter(ch) => {
-						app.event(&Event::ReceivedCharacter(ch));
+						event_proxy
+							.send_event(Event::ReceivedCharacter(ch))
+							.expect("Failed to send event");
 					}
 
 					WindowEvent::KeyboardInput {
@@ -171,15 +173,20 @@ impl Window {
 						..
 					} => {
 						if let Some(key) = virtual_keycode {
-							let key: Key = key.into();
+							let key = Key::from(key);
 							held_keys.remove(&key);
-							app.event(&Event::KeyUp(key));
+							event_proxy
+								.send_event(Event::KeyUp(key))
+								.expect("Failed to send event");
 						}
 					}
 
 					_ => {}
 				},
 
+				WinitEvent::UserEvent(user_event) => {
+					event_handler(user_event, control_flow);
+				}
 				_ => {}
 			};
 		});

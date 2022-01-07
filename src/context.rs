@@ -105,6 +105,12 @@ impl<'a> DrawContext<'a> {
 	pub fn viewport_size(&self) -> &(f32, f32) {
 		&self.viewport_size
 	}
+
+	pub fn uniform_alignment(&self, index: usize) -> wgpu::DynamicOffset {
+		let uniform_alignment =
+			self.device().limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		(index * uniform_alignment as usize) as wgpu::DynamicOffset
+	}
 }
 
 impl MountContext {

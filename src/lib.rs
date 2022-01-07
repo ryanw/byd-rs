@@ -17,6 +17,9 @@ pub use drawable::*;
 pub mod context;
 pub use context::*;
 
+pub mod render_context;
+pub use render_context::*;
+
 pub mod material;
 pub use material::*;
 
@@ -40,6 +43,9 @@ pub use state::*;
 
 pub mod vertex;
 pub use vertex::*;
+
+pub mod renderer;
+pub use renderer::*;
 
 #[cfg(unix)]
 pub mod term;

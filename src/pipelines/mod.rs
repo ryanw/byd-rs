@@ -1,5 +1,7 @@
 mod simple;
 pub use simple::*;
+mod quad;
+pub use quad::*;
 use std::mem::size_of_val;
 
 pub trait Uniform {

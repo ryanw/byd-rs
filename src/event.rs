@@ -1,6 +1,6 @@
-use winit::event::VirtualKeyCode;
+use std::time::Duration;
 
-use crate::context::DrawContext;
+use winit::event::VirtualKeyCode;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum MouseButton {
@@ -72,6 +72,7 @@ pub enum Key {
 	Z,
 }
 
+#[derive(Debug)]
 pub enum Event {
 	KeyUp(Key),
 	KeyDown(Key),
@@ -84,6 +85,7 @@ pub enum Event {
 	MouseDrag(MouseButton, f32, f32),
 	WindowResize(u32, u32),
 	ReceivedCharacter(char),
+	Draw(Duration),
 }
 
 impl From<VirtualKeyCode> for Key {

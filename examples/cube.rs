@@ -52,8 +52,8 @@ impl App for CubeApp {
 		self.rotation.x += Rad(5.0) * dt;
 		for (id, pod) in self.scene.actors_mut() {
 			let y = -3.0 + *id as f32 * 2.0;
-			pod.actor.transform = Matrix4::from_translation(Vector3::new(0.0, y, 0.5))
-			* Matrix4::from(self.rotation);
+			pod.actor.transform =
+				Matrix4::from_translation(Vector3::new(0.0, y, 0.5)) * Matrix4::from(self.rotation);
 		}
 	}
 
@@ -62,5 +62,5 @@ impl App for CubeApp {
 
 fn main() {
 	env_logger::init();
-	Window::new().run(CubeApp::new());
+	Window::new(1280, 720).run(CubeApp::new());
 }
