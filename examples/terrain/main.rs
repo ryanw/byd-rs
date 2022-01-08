@@ -20,6 +20,8 @@ async fn async_main() {
 	let cube_ids: Rc<RefCell<Vec<usize>>> = Rc::new(RefCell::new(vec![]));
 
 	let scene = Rc::new(RefCell::new(scene));
+	let renderer = Rc::new(RefCell::new(renderer));
+
 	let update = {
 		let scene = scene.clone();
 		let cube_ids = cube_ids.clone();
@@ -34,10 +36,13 @@ async fn async_main() {
 		}
 	};
 
-	let mut draw = {
+	let draw = {
 		let scene = scene.clone();
+		let renderer = renderer.clone();
 		move |_| {
-			renderer.render(scene.borrow_mut(), &camera);
+			if let Err(error) = renderer.borrow_mut().render(scene.borrow_mut(), &camera) {
+				log::error!("Error rendering scene: {:?}", error);
+			}
 		}
 	};
 
@@ -60,6 +65,10 @@ async fn async_main() {
 			let dt = elapsed.as_secs_f32();
 			update(dt);
 			draw(dt);
+		}
+		Event::WindowResize(width, height) => {
+			log::debug!("Window resized {}x{}", width, height);
+			renderer.borrow_mut().resize(width, height);
 		}
 		_ => {}
 	});

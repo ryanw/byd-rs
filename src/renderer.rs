@@ -3,6 +3,7 @@ use crate::{
 	Camera, RenderContext, Scene, Window,
 };
 use std::{
+	error::Error,
 	mem::size_of,
 	ops::{Deref, DerefMut},
 };
@@ -49,6 +50,7 @@ impl Renderer {
 			)
 			.await
 			.expect("Failed to request device");
+
 		let texture_desc = wgpu::TextureDescriptor {
 			label: Some("Main render texture"),
 			size: wgpu::Extent3d {
@@ -96,29 +98,69 @@ impl Renderer {
 
 	pub fn attach(&mut self, window: &Window) {
 		let surface = unsafe { self.instance.create_surface(&window.winit) };
-
-		let config = wgpu::SurfaceConfiguration {
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-			format: surface
-				.get_preferred_format(&self.adapter)
-				.expect("Failed to get preferred surface format"),
-			width: self.size.width,
-			height: self.size.height,
-			present_mode: wgpu::PresentMode::Fifo,
-		};
-		surface.configure(&self.device, &config);
 		self.surface = Some(surface);
+		self.resize(self.size.width, self.size.height);
 	}
 
-	pub fn render<S>(&mut self, mut scene: S, camera: &dyn Camera)
+	pub fn resize(&mut self, width: u32, height: u32) {
+		self.size.width = width;
+		self.size.height = height;
+
+		if let Some(surface) = self.surface.as_ref() {
+			log::debug!("Resizing renderer surface {}x{}", width, height);
+			let config = wgpu::SurfaceConfiguration {
+				usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+				format: surface
+					.get_preferred_format(&self.adapter)
+					.expect("Failed to get preferred surface format"),
+				width: self.size.width,
+				height: self.size.height,
+				present_mode: wgpu::PresentMode::Fifo,
+			};
+			surface.configure(&self.device, &config);
+		}
+
+		log::debug!("Resizing renderer texture {}x{}", width, height);
+		let texture_desc = wgpu::TextureDescriptor {
+			label: Some("Main render texture"),
+			size: wgpu::Extent3d {
+				width,
+				height,
+				depth_or_array_layers: 1,
+			},
+			mip_level_count: 1,
+			sample_count: 1,
+			dimension: wgpu::TextureDimension::D2,
+			format: wgpu::TextureFormat::Bgra8UnormSrgb,
+			usage: wgpu::TextureUsages::TEXTURE_BINDING
+				| wgpu::TextureUsages::COPY_SRC
+				| wgpu::TextureUsages::RENDER_ATTACHMENT,
+		};
+		let texture = self.device.create_texture(&texture_desc);
+		let view = texture.create_view(&Default::default());
+		let quad = Quad::new(&self.device, &view, &self.sampler);
+
+		self.texture.destroy();
+		self.texture = texture;
+		self.view = view;
+		self.quad = quad;
+	}
+
+	pub fn render<S>(&mut self, mut scene: S, camera: &dyn Camera) -> Result<(), Box<dyn Error>>
 	where
 		S: DerefMut<Target = Scene>,
 	{
-		self.render_to_buffer(&mut *scene, camera);
-		self.render_to_surface();
+		self.render_to_buffer(&mut *scene, camera)?;
+		self.render_to_surface()?;
+
+		Ok(())
 	}
 
-	pub fn render_to_buffer(&mut self, scene: &mut Scene, camera: &dyn Camera) {
+	pub fn render_to_buffer(
+		&mut self,
+		scene: &mut Scene,
+		camera: &dyn Camera,
+	) -> Result<(), Box<dyn Error>> {
 		let mut encoder = self
 			.device
 			.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -155,13 +197,13 @@ impl Renderer {
 		}
 
 		self.queue.submit(std::iter::once(encoder.finish()));
+
+		Ok(())
 	}
 
-	pub fn render_to_surface(&mut self) {
+	pub fn render_to_surface(&mut self) -> Result<(), Box<dyn Error>> {
 		if let Some(surface) = &self.surface {
-			let frame = surface
-				.get_current_texture()
-				.expect("Failed to get surface texture");
+			let frame = surface.get_current_texture()?;
 			let view = frame
 				.texture
 				.create_view(&wgpu::TextureViewDescriptor::default());
@@ -198,6 +240,8 @@ impl Renderer {
 			self.queue.submit(std::iter::once(encoder.finish()));
 			frame.present();
 		}
+
+		Ok(())
 	}
 }
 
