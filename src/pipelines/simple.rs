@@ -1,13 +1,14 @@
-use std::mem::size_of;
-
 use super::Uniform;
-use crate::{DrawContext, SimpleVertex, Vertex};
+use crate::{SimpleVertex, Vertex};
+use byd_derive::CastBytes;
 use cgmath::Matrix4;
+use std::mem::size_of;
 
 const CAMERA_BINDING: u32 = 0;
 const ACTOR_BINDING: u32 = 1;
 const MAX_ACTORS: u64 = 1024;
 
+#[derive(Copy, Clone, CastBytes)]
 pub struct CameraUniform {
 	pub view: Matrix4<f32>,
 	pub projection: Matrix4<f32>,
@@ -15,6 +16,7 @@ pub struct CameraUniform {
 
 impl Uniform for CameraUniform {}
 
+#[derive(Copy, Clone, CastBytes)]
 pub struct ActorUniform {
 	pub model: Matrix4<f32>,
 }
@@ -23,9 +25,6 @@ impl Uniform for ActorUniform {}
 pub struct SimplePipeline {
 	render_pipeline: wgpu::RenderPipeline,
 	bind_group_layout: wgpu::BindGroupLayout,
-	bind_group: wgpu::BindGroup,
-	camera_buffer: wgpu::Buffer,
-	actor_buffer: wgpu::Buffer,
 }
 
 impl SimplePipeline {
@@ -109,84 +108,18 @@ impl SimplePipeline {
 			multiview: None,
 		});
 
-		let uniform_alignment =
-			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-
-		let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Camera Uniform Buffer"),
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size: uniform_alignment,
-			mapped_at_creation: false,
-		});
-
-		let actor_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Actor Uniform Buffer"),
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size: MAX_ACTORS * uniform_alignment,
-			mapped_at_creation: false,
-		});
-
-		let camera_uniform_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
-		let actor_uniform_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
-
-		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("SimplePipeline Bind Group"),
-			layout: &bind_group_layout,
-			entries: &[
-				// Camera
-				wgpu::BindGroupEntry {
-					binding: 0,
-					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-						buffer: &camera_buffer,
-						offset: 0,
-						size: wgpu::BufferSize::new(camera_uniform_size),
-					}),
-				},
-				// Actor
-				wgpu::BindGroupEntry {
-					binding: 1,
-					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-						buffer: &actor_buffer,
-						offset: 0,
-						size: wgpu::BufferSize::new(actor_uniform_size),
-					}),
-				},
-			],
-		});
-
 		Self {
 			render_pipeline: pipeline,
 			bind_group_layout,
-			bind_group,
-			camera_buffer,
-			actor_buffer,
 		}
 	}
 
-	pub fn apply<'a>(&'a self, ctx: &mut DrawContext<'a>) {
-		ctx.render_pass_mut().set_pipeline(&self.render_pipeline);
+	pub fn apply<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+		render_pass.set_pipeline(&self.render_pipeline);
 	}
 
 	/// Get a reference to the simple pipeline's bind group layout.
 	pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
 		&self.bind_group_layout
-	}
-
-	pub fn set_camera(&self, ctx: &mut DrawContext, camera: &CameraUniform) {
-		ctx.queue()
-			.write_buffer(&self.camera_buffer, 0, camera.as_bytes());
-	}
-
-	pub fn set_actor(&self, ctx: &mut DrawContext, index: usize, actor: &ActorUniform) {
-		let offset = ctx.uniform_alignment(index);
-
-		ctx.queue()
-			.write_buffer(&self.actor_buffer, offset as _, actor.as_bytes());
-	}
-
-	pub fn bind_actor<'a>(&'a self, ctx: &mut DrawContext<'a>, index: usize) {
-		let offset = ctx.uniform_alignment(index);
-		ctx.render_pass_mut()
-			.set_bind_group(0, &self.bind_group, &[offset]);
 	}
 }

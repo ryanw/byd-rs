@@ -1,10 +1,8 @@
-use crate::{App, AttachContext, Event, Key, MouseButton, State, UpdateContext};
+use crate::{Event, Key, MouseButton};
 use std::{
 	collections::HashSet,
-	time::{self, Duration, Instant},
+	time::{self, Instant},
 };
-#[cfg(test)]
-use winit::platform::unix::EventLoopExtUnix;
 #[cfg(target_os = "linux")]
 use winit::platform::unix::WindowBuilderExtUnix;
 use winit::{
@@ -13,7 +11,7 @@ use winit::{
 		DeviceEvent, ElementState, Event as WinitEvent, KeyboardInput, MouseScrollDelta,
 		WindowEvent,
 	},
-	event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
+	event_loop::{ControlFlow, EventLoop},
 	window::{Window as WinitWindow, WindowBuilder},
 };
 

@@ -2,7 +2,10 @@ use crate::{
 	pipelines::{QuadPipeline, Vertex as QuadVertex},
 	Camera, RenderContext, Scene, Window,
 };
-use std::mem::size_of;
+use std::{
+	mem::size_of,
+	ops::{Deref, DerefMut},
+};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 pub struct Renderer {
@@ -107,12 +110,15 @@ impl Renderer {
 		self.surface = Some(surface);
 	}
 
-	pub fn render(&mut self, scene: &Scene, camera: &dyn Camera) {
-		self.render_to_buffer(scene, camera);
+	pub fn render<S>(&mut self, mut scene: S, camera: &dyn Camera)
+	where
+		S: DerefMut<Target = Scene>,
+	{
+		self.render_to_buffer(&mut *scene, camera);
 		self.render_to_surface();
 	}
 
-	pub fn render_to_buffer(&mut self, scene: &Scene, camera: &dyn Camera) {
+	pub fn render_to_buffer(&mut self, scene: &mut Scene, camera: &dyn Camera) {
 		let mut encoder = self
 			.device
 			.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -140,8 +146,8 @@ impl Renderer {
 			// Draw everything
 			let mut ctx = RenderContext {
 				device: &self.device,
-				queue: &self.queue,
-				render_pass: &render_pass,
+				queue: &mut self.queue,
+				render_pass,
 				camera,
 			};
 
@@ -238,11 +244,11 @@ impl Quad {
 }
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
-const QUAD_VERTICES: [[f32; 3]; 6] = [
-	[ 1.0,  1.0, 0.5],
-	[-1.0,  1.0, 0.5],
-	[ 1.0, -1.0, 0.5],
-	[-1.0, -1.0, 0.5],
-	[ 1.0, -1.0, 0.5],
-	[-1.0,  1.0, 0.5],
+const QUAD_VERTICES: [QuadVertex; 6] = [
+	QuadVertex::new( 1.0,  1.0, 0.5),
+	QuadVertex::new(-1.0,  1.0, 0.5),
+	QuadVertex::new( 1.0, -1.0, 0.5),
+	QuadVertex::new(-1.0, -1.0, 0.5),
+	QuadVertex::new( 1.0, -1.0, 0.5),
+	QuadVertex::new(-1.0,  1.0, 0.5),
 ];

@@ -1,0 +1,12 @@
+[package]
+name = "byd_derive"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ryan Williams <git@ryan.nz>"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1.0", features = ["extra-traits"] }
+quote = "1.0"

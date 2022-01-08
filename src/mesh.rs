@@ -1,59 +1,76 @@
-use crate::Vertex;
+use crate::{BasicMaterial, Geometry, MountContext, RenderContext, SceneObject, Vertex};
+use byd_derive::CastBytes;
 use cgmath::{Matrix4, Point3, SquareMatrix};
 use std::mem::size_of;
 use wgpu::VertexFormat::{Float32x3, Float32x4};
 
-pub type Color = u32;
-
-pub trait Material {}
-
 #[derive(Clone)]
-pub struct Geometry {}
-
-#[derive(Clone)]
-pub struct BasicMaterial {
-	color: Color,
-}
-
-#[derive(Clone)]
-pub struct Mesh {
-	geometry: Geometry,
+pub struct Mesh<V: Vertex> {
+	geometry: Geometry<V>,
 	material: BasicMaterial,
 	pub transform: Matrix4<f32>,
 }
 
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Copy, Clone, CastBytes)]
 pub struct SimpleVertex {
 	pub position: Point3<f32>,
 	pub color: (f32, f32, f32, f32),
 }
 
-impl Geometry {
-	pub fn new() -> Self {
-		Self {}
-	}
-
-	pub fn cube() -> Self {
-		Self {}
+impl From<[f32; 3]> for SimpleVertex {
+	fn from(position: [f32; 3]) -> Self {
+		Self::from(&position)
 	}
 }
 
-impl BasicMaterial {
-	pub fn new(color: Color) -> Self {
-		Self { color }
+impl From<&[f32; 3]> for SimpleVertex {
+	fn from(position: &[f32; 3]) -> Self {
+		Self {
+			position: Point3::new(position[0], position[1], position[2]),
+			color: (1.0, 0.0, 0.0, 1.0),
+		}
 	}
 }
 
-impl Material for BasicMaterial {}
-
-impl Mesh {
-	pub fn new(geometry: Geometry, material: BasicMaterial) -> Self {
+impl<V: Vertex> Mesh<V> {
+	pub fn new(geometry: Geometry<V>, material: BasicMaterial) -> Self {
 		Self {
 			geometry,
 			material,
 			transform: Matrix4::identity(),
 		}
+	}
+
+	pub fn transform_mut(&mut self) -> &mut Matrix4<f32> {
+		&mut self.transform
+	}
+}
+
+impl<V: Vertex> SceneObject for Mesh<V> {
+	fn render<'a>(&'a self, ctx: &mut RenderContext<'a>) {
+		if let Some(buffer) = self.geometry.vertex_buffer() {
+			let render_pass = &mut ctx.render_pass;
+			let len = self.geometry.vertex_count() as u32;
+			render_pass.set_vertex_buffer(0, buffer.slice(..));
+			render_pass.draw(0..len, 0..1);
+		}
+	}
+
+	fn mount(&mut self, ctx: &mut MountContext) {
+		log::debug!("Mesh mounted");
+		self.geometry
+			.allocate(ctx.device)
+			.expect("Failed to allocate mesh geometry");
+	}
+
+	fn unmount(&mut self, _ctx: &mut MountContext) {
+		log::debug!("Mesh unmounted");
+		self.geometry.free().expect("Failed to free mesh geometry");
+	}
+
+	fn transform(&self) -> Matrix4<f32> {
+		self.transform.clone()
 	}
 }
 

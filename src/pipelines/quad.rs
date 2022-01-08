@@ -1,3 +1,4 @@
+use byd_derive::CastBytes;
 use cgmath::Point3;
 use std::mem::size_of;
 use wgpu::VertexFormat::Float32x3;
@@ -8,11 +9,18 @@ pub struct QuadPipeline {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, CastBytes)]
 pub struct Vertex {
 	pub position: Point3<f32>,
 }
 
 impl Vertex {
+	pub const fn new(x: f32, y: f32, z: f32) -> Self {
+		Self {
+			position: Point3::new(x, y, z),
+		}
+	}
+
 	fn buffer_layout<'a>() -> ::wgpu::VertexBufferLayout<'a> {
 		wgpu::VertexBufferLayout {
 			array_stride: size_of::<Self>() as _,

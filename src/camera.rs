@@ -4,6 +4,9 @@ use cgmath::{Deg, EuclideanSpace, Euler, Matrix4, Point3, Rad, SquareMatrix, Tra
 
 pub trait Camera {
 	fn view(&self) -> Matrix4<f32>;
+	fn projection(&self) -> Matrix4<f32> {
+		Matrix4::identity()
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -20,12 +23,12 @@ impl FreeCamera {
 		let mut camera = Self {
 			width: 1.0,
 			height: 1.0,
-			position: Point3::new(0.0, 1.0, 0.0),
+			position: Point3::new(0.0, 0.0, -10.0),
 			rotation: Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
 			projection: Matrix4::identity(),
 		};
 
-		camera.resize(1280.0, 768.0);
+		camera.resize(1280.0, 720.0);
 
 		camera
 	}
@@ -98,10 +101,6 @@ impl FreeCamera {
 	pub fn height(&self) -> f32 {
 		self.height
 	}
-
-	pub fn projection(&self) -> Matrix4<f32> {
-		self.projection.clone()
-	}
 }
 
 impl Camera for FreeCamera {
@@ -110,5 +109,9 @@ impl Camera for FreeCamera {
 		let rotate: Matrix4<f32> = self.rotation.into();
 
 		translate * rotate.inverse_transform().unwrap()
+	}
+
+	fn projection(&self) -> Matrix4<f32> {
+		self.projection.clone()
 	}
 }

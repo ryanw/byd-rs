@@ -1,130 +1,207 @@
-use crate::pipelines::{ActorUniform, CameraUniform, SimplePipeline, Uniform};
-use crate::{Actor, ActorID, Camera, DrawContext, Drawable, FreeCamera, RenderContext};
-use crate::{Mesh, MountContext};
-use cgmath::{Matrix4, Point3};
+use crate::{
+	pipelines::{ActorUniform, CameraUniform, SimplePipeline},
+	Camera, MountContext, RenderContext,
+};
+use cgmath::{Matrix4, SquareMatrix};
+use downcast_rs::{impl_downcast, Downcast};
 use std::{
-	collections::HashMap,
+	collections::{HashMap, HashSet},
+	mem::size_of,
 	sync::atomic::{AtomicUsize, Ordering},
 };
 
-#[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
-	1.0, 0.0, 0.0, 0.0,
-	0.0, 1.0, 0.0, 0.0,
-	0.0, 0.0, 0.5, 0.0,
-	0.0, 0.0, 0.5, 1.0,
-);
+const MAX_ACTORS: u64 = 2048;
 
+pub type ObjectID = usize;
 pub static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 
-pub struct ActorPod {
-	pub id: ActorID,
-	pub actor: Actor,
-	uniform_offset: usize,
+pub trait SceneObject: Downcast {
+	fn render<'a>(&'a self, _ctx: &mut RenderContext<'a>) {}
+	fn mount(&mut self, _ctx: &mut MountContext) {}
+	fn unmount(&mut self, _ctx: &mut MountContext) {}
+	fn transform(&self) -> Matrix4<f32> {
+		Matrix4::identity()
+	}
+}
+impl_downcast!(SceneObject);
+
+pub struct SceneUniforms {
+	pipeline: SimplePipeline,
+	bind_group: wgpu::BindGroup,
+	camera_buffer: wgpu::Buffer,
+	actor_buffer: wgpu::Buffer,
+}
+
+impl SceneUniforms {
+	pub fn new(device: &wgpu::Device) -> Self {
+		log::debug!("Building Scene Uniforms");
+		let pipeline = SimplePipeline::new(device);
+
+		let uniform_alignment =
+			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+
+		let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Camera Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let actor_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Actor Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: MAX_ACTORS * uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let camera_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
+		let actor_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
+
+		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			label: Some("QuadPipeline Bind Group"),
+			layout: pipeline.bind_group_layout(),
+			entries: &[
+				// Camera
+				wgpu::BindGroupEntry {
+					binding: 0,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &camera_buffer,
+						size: wgpu::BufferSize::new(camera_size),
+						offset: 0,
+					}),
+				},
+				// Actors
+				wgpu::BindGroupEntry {
+					binding: 1,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &actor_buffer,
+						size: wgpu::BufferSize::new(actor_size),
+						offset: 0,
+					}),
+				},
+			],
+		});
+
+		Self {
+			pipeline,
+			bind_group,
+			camera_buffer,
+			actor_buffer,
+		}
+	}
+
+	fn set_camera(&self, ctx: &mut RenderContext, camera: &dyn Camera) {
+		let contents = CameraUniform {
+			view: camera.view(),
+			projection: camera.projection(),
+		};
+		ctx.queue
+			.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[contents]));
+	}
+
+	fn set_actor(&self, ctx: &mut RenderContext, index: u64, model: Matrix4<f32>) {
+		let uniform_alignment =
+			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
+		let contents = ActorUniform { model };
+		ctx.queue.write_buffer(
+			&self.actor_buffer,
+			offset as _,
+			bytemuck::cast_slice(&[contents]),
+		);
+	}
+
+	fn bind_actor<'a>(&'a self, ctx: &mut RenderContext<'a>, index: u64) {
+		let render_pass = &mut ctx.render_pass;
+		let uniform_alignment =
+			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
+		self.pipeline.apply(render_pass);
+		render_pass.set_bind_group(0, &self.bind_group, &[offset]);
+	}
 }
 
 pub struct Scene {
-	camera: FreeCamera,
-	actors: HashMap<ActorID, ActorPod>,
-	pipeline: Option<SimplePipeline>,
+	objects: HashMap<ObjectID, Box<dyn SceneObject>>,
+	mounted: HashSet<ObjectID>,
+	removed: HashSet<ObjectID>,
+	uniforms: Option<SceneUniforms>,
 }
 
 impl Scene {
 	pub fn new() -> Self {
 		Self {
-			camera: FreeCamera::new(),
-			actors: HashMap::new(),
-			pipeline: None,
+			objects: HashMap::new(),
+			mounted: HashSet::new(),
+			removed: HashSet::new(),
+			uniforms: None,
 		}
 	}
 
-	pub fn build_pipeline(&mut self, ctx: &mut DrawContext) {
-		self.pipeline = Some(SimplePipeline::new(ctx.device()));
-	}
+	pub fn render<'a>(&'a mut self, ctx: &mut RenderContext<'a>) {
+		let uniforms = self
+			.uniforms
+			.get_or_insert_with(|| SceneUniforms::new(ctx.device));
 
-	pub fn render<'a>(&'a self, ctx: &mut RenderContext<'a>) {}
-
-	pub fn draw<'a>(&'a mut self, ctx: &mut DrawContext<'a>) {
-		if self.pipeline.is_none() {
-			self.build_pipeline(ctx);
-		}
-
-		*self.camera.position_mut() = Point3::new(0.0, 0.0, -10.0);
-
-		if let Some(pipeline) = self.pipeline.as_ref() {
-			pipeline.apply(ctx);
-
-			// Update camera position
-			pipeline.set_camera(
-				ctx,
-				&CameraUniform {
-					view: self.camera.view(),
-					projection: self.camera.projection(),
-				},
-			);
-
-			// Update actor positions
-			for pod in self.actors.values_mut() {
-				pipeline.set_actor(
-					ctx,
-					pod.uniform_offset,
-					&ActorUniform {
-						model: pod.actor.transform.clone(),
-					},
-				);
-				pipeline.bind_actor(ctx, pod.uniform_offset);
-				pod.actor.draw(ctx);
+		let mut mount_ctx = MountContext { device: ctx.device };
+		for id in self.removed.drain() {
+			if let Some(mut object) = self.objects.remove(&id) {
+				object.unmount(&mut mount_ctx);
 			}
 		}
-	}
 
-	pub fn add(&mut self, mesh: Mesh) -> usize {
-		0
-	}
-
-	pub fn get_mut(&mut self, id: usize) -> Option<&mut Mesh> {
-		None
-	}
-
-	pub fn old_add(&mut self, mut actor: Actor) {
-		let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-		let uniform_offset = self.actors.len();
-		let mut ctx = MountContext { actor_id: id };
-		actor.mount(&mut ctx);
-		self.actors.insert(
-			id,
-			ActorPod {
-				id,
-				actor,
-				uniform_offset,
-			},
-		);
-	}
-
-	pub fn remove(&mut self, id: ActorID) {
-		if let Some(mut pod) = self.actors.remove(&id) {
-			let mut ctx = MountContext { actor_id: id };
-			pod.actor.unmount(&mut ctx);
+		uniforms.set_camera(ctx, ctx.camera);
+		for (id, object) in &mut self.objects {
+			if !self.mounted.contains(id) {
+				object.mount(&mut mount_ctx);
+				self.mounted.insert(*id);
+			}
+			uniforms.set_actor(ctx, *id as _, object.transform());
+			uniforms.bind_actor(ctx, *id as _);
+			object.render(ctx);
 		}
 	}
 
-	/// Get a reference to the scene's camera.
-	pub fn camera(&self) -> &FreeCamera {
-		&self.camera
+	pub fn add<O>(&mut self, object: O) -> ObjectID
+	where
+		O: 'static + SceneObject,
+	{
+		let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+		self.objects.insert(id, Box::new(object));
+		id
 	}
 
-	/// Get a mutable reference to the scene's camera.
-	pub fn camera_mut(&mut self) -> &mut FreeCamera {
-		&mut self.camera
+	pub fn get(&self, id: ObjectID) -> Option<&Box<dyn SceneObject>> {
+		self.objects.get(&id)
 	}
 
-	/// Get a reference to the scene's actors.
-	pub fn actors(&self) -> &HashMap<ActorID, ActorPod> {
-		&self.actors
+	pub fn get_mut(&mut self, id: ObjectID) -> Option<&mut Box<dyn SceneObject>> {
+		self.objects.get_mut(&id)
 	}
 
-	/// Get a mutable reference to the scene's actors.
-	pub fn actors_mut(&mut self) -> &mut HashMap<ActorID, ActorPod> {
-		&mut self.actors
+	pub fn remove(&mut self, id: ObjectID) {
+		if self.objects.contains_key(&id) {
+			self.removed.insert(id);
+		}
+	}
+
+	pub fn with_object<O, F>(&self, id: ObjectID, handler: F)
+	where
+		O: SceneObject,
+		F: FnOnce(&O),
+	{
+		if let Some(obj) = self.get(id).and_then(|obj| obj.downcast_ref::<O>()) {
+			handler(obj);
+		}
+	}
+
+	pub fn with_object_mut<O, F>(&mut self, id: ObjectID, handler: F)
+	where
+		O: SceneObject,
+		F: FnOnce(&mut O),
+	{
+		if let Some(obj) = self.get_mut(id).and_then(|obj| obj.downcast_mut::<O>()) {
+			handler(obj);
+		}
 	}
 }
