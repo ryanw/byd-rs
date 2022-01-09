@@ -1,6 +1,6 @@
 use crate::{BasicMaterial, Geometry, MountContext, RenderContext, SceneObject, Vertex};
 use byd_derive::CastBytes;
-use cgmath::{Matrix4, Point3, SquareMatrix};
+use cgmath::{EuclideanSpace, InnerSpace, Matrix4, Point3, SquareMatrix, Vector3};
 use std::mem::size_of;
 use wgpu::VertexFormat::{Float32x3, Float32x4};
 
@@ -12,9 +12,10 @@ pub struct Mesh<V: Vertex> {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, CastBytes)]
+#[derive(Copy, Clone, CastBytes, Debug)]
 pub struct SimpleVertex {
 	pub position: Point3<f32>,
+	pub normal: Vector3<f32>,
 	pub color: (f32, f32, f32, f32),
 }
 
@@ -26,9 +27,11 @@ impl From<[f32; 3]> for SimpleVertex {
 
 impl From<&[f32; 3]> for SimpleVertex {
 	fn from(position: &[f32; 3]) -> Self {
+		let position = Point3::new(position[0], position[1], position[2]);
 		Self {
-			position: Point3::new(position[0], position[1], position[2]),
-			color: (1.0, 0.0, 0.0, 1.0),
+			normal: position.to_vec(),
+			position,
+			color: (1.0, 1.0, 0.0, 1.0),
 		}
 	}
 }
@@ -44,6 +47,16 @@ impl<V: Vertex> Mesh<V> {
 
 	pub fn transform_mut(&mut self) -> &mut Matrix4<f32> {
 		&mut self.transform
+	}
+
+	/// Get a reference to the mesh's geometry.
+	pub fn geometry(&self) -> &Geometry<V> {
+		&self.geometry
+	}
+
+	/// Get a mutable reference to the mesh's geometry.
+	pub fn geometry_mut(&mut self) -> &mut Geometry<V> {
+		&mut self.geometry
 	}
 }
 
@@ -88,6 +101,11 @@ impl Vertex for SimpleVertex {
 				wgpu::VertexAttribute {
 					offset: size_of::<Point3<f32>>() as _,
 					shader_location: 1,
+					format: Float32x3,
+				},
+				wgpu::VertexAttribute {
+					offset: (size_of::<Point3<f32>>() + size_of::<Vector3<f32>>()) as _,
+					shader_location: 2,
 					format: Float32x4,
 				},
 			],

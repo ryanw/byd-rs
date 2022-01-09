@@ -73,6 +73,16 @@ impl<V: Vertex> Geometry<V> {
 	pub fn vertex_buffer(&self) -> Option<&wgpu::Buffer> {
 		self.vertex_buffer.as_ref()
 	}
+
+	/// Get a reference to the geometry's vertices.
+	pub fn vertices(&self) -> &[V] {
+		self.vertices.as_ref()
+	}
+
+	/// Get a mutable reference to the geometry's vertices.
+	pub fn vertices_mut(&mut self) -> &mut Vec<V> {
+		&mut self.vertices
+	}
 }
 
 impl<V: Vertex> Drop for Geometry<V> {

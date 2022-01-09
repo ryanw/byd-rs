@@ -18,7 +18,7 @@ fn vs_main(
 	var out: VertexOutput;
 
 	out.position = vec4<f32>(position, 1.0);
-	out.uv = position.xy * 0.5 + 0.5;
+	out.uv = vec2<f32>(position.x * 0.5 + 0.5, -position.y * 0.5 + 0.5);
 
 	return out;
 }
