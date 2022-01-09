@@ -3,6 +3,8 @@ use cgmath::Point3;
 use std::mem::size_of;
 use wgpu::VertexFormat::Float32x3;
 
+use crate::Pipeline;
+
 pub struct QuadPipeline {
 	render_pipeline: wgpu::RenderPipeline,
 	bind_group_layout: wgpu::BindGroupLayout,
@@ -35,10 +37,6 @@ impl Vertex {
 }
 
 impl QuadPipeline {
-	pub fn apply<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-		render_pass.set_pipeline(&self.render_pipeline);
-	}
-
 	pub fn new(device: &wgpu::Device) -> Self {
 		// Uniforms
 		let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -118,9 +116,14 @@ impl QuadPipeline {
 			bind_group_layout,
 		}
 	}
+}
 
-	/// Get a reference to the quad pipeline's bind group layout.
-	pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+impl Pipeline for QuadPipeline {
+	fn apply<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+		render_pass.set_pipeline(&self.render_pipeline);
+	}
+
+	fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
 		&self.bind_group_layout
 	}
 }

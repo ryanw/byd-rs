@@ -1,5 +1,5 @@
 use byd::{
-	BasicMaterial, Camera, Event, FreeCamera, Geometry, Mesh, MouseButton, Renderer, Scene,
+	BasicMaterial, Camera, Color, Event, FreeCamera, Geometry, Mesh, MouseButton, Renderer, Scene,
 	SimpleVertex, Window,
 };
 use cgmath::{Euler, Matrix4, Rad, Vector3};
@@ -21,8 +21,10 @@ impl App {
 		renderer.attach(&window);
 		let scene = Scene::new();
 		let camera = FreeCamera::new();
-		let mut cube: Mesh<SimpleVertex> =
-			Mesh::new(Geometry::cube(), BasicMaterial::new(0xff00ff));
+		let mut cube: Mesh<SimpleVertex> = Mesh::new(
+			Geometry::cube(),
+			BasicMaterial::new(Color::new(1.0, 0.0, 1.0, 1.0)),
+		);
 
 		// Calculate normals
 		// FIXME Geometry should do this
@@ -52,6 +54,12 @@ impl App {
 	pub fn add_cube(&mut self, x: f32, y: f32, z: f32) {
 		let mut cube = self.cube.clone();
 		cube.transform = Matrix4::from_translation(Vector3::new(x, y, z));
+		cube.material.color = Color::new(
+			rand::random::<f32>(),
+			rand::random::<f32>(),
+			rand::random::<f32>(),
+			1.0,
+		);
 		self.cube_ids.push(self.scene.add(cube));
 	}
 

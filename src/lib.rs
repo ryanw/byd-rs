@@ -1,6 +1,8 @@
 pub type ActorID = usize;
 
+pub mod pipeline;
 pub mod pipelines;
+pub use pipeline::*;
 
 pub mod camera;
 pub use camera::*;
@@ -20,9 +22,6 @@ pub use geometry::*;
 pub mod mesh;
 pub use mesh::*;
 
-pub mod uniforms;
-pub use uniforms::*;
-
 pub mod event;
 pub use event::*;
 
@@ -38,11 +37,12 @@ pub use renderer::*;
 pub mod vertex;
 pub use vertex::*;
 
+pub mod color;
+pub use color::*;
+
 /*
 #[cfg(unix)]
 pub mod term;
 #[cfg(unix)]
 pub use term::*;
 */
-
-pub type Color = u32;

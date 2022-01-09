@@ -1,4 +1,4 @@
-use crate::{BasicMaterial, Geometry, MountContext, RenderContext, SceneObject, Vertex};
+use crate::{BasicMaterial, Geometry, Material, MountContext, RenderContext, SceneObject, Vertex};
 use byd_derive::CastBytes;
 use cgmath::{EuclideanSpace, InnerSpace, Matrix4, Point3, SquareMatrix, Vector3};
 use std::mem::size_of;
@@ -7,7 +7,7 @@ use wgpu::VertexFormat::{Float32x3, Float32x4};
 #[derive(Clone)]
 pub struct Mesh<V: Vertex> {
 	geometry: Geometry<V>,
-	material: BasicMaterial,
+	pub material: BasicMaterial,
 	pub transform: Matrix4<f32>,
 }
 
@@ -84,6 +84,10 @@ impl<V: Vertex> SceneObject for Mesh<V> {
 
 	fn transform(&self) -> Matrix4<f32> {
 		self.transform.clone()
+	}
+
+	fn material(&self) -> Option<&dyn Material> {
+		Some(&self.material)
 	}
 }
 

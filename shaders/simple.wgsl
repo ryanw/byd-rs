@@ -6,6 +6,7 @@ struct Camera {
 };
 
 struct Actor {
+	color: vec4<f32>;
 	model: mat4x4<f32>;
 };
 
@@ -36,7 +37,7 @@ fn vs_main(
 	out.position = mvp * vec4<f32>(position, 1.0);
 	out.world_position = (actor.model * vec4<f32>(position, 1.0)).xyz;
 	out.normal = normalize((actor.model * vec4<f32>(normal, 0.0)).xyz);
-	out.color = color;
+	out.color = actor.color;
 
 	return out;
 }
@@ -48,6 +49,5 @@ fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
 	var light_dir = normalize(light_pos - in.world_position);
 	var shade = clamp(dot(in.normal, light_dir), 0.0, 0.7) + 0.3;
 	var color = in.color * shade;
-	return color;
-	//return pow(color, vec4<f32>(gamma));
+	return pow(color, vec4<f32>(gamma));
 }

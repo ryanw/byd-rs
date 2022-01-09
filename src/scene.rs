@@ -1,8 +1,8 @@
 use crate::{
-	pipelines::{ActorUniform, CameraUniform, SimplePipeline},
-	Camera, MountContext, RenderContext,
+	pipelines::{ActorUniform, CameraUniform, SimplePipeline, ACTOR_BINDING, CAMERA_BINDING},
+	BasicMaterial, Camera, Material, MountContext, Pipeline, RenderContext,
 };
-use cgmath::{Matrix4, SquareMatrix};
+use cgmath::{Matrix4, SquareMatrix, Vector4};
 use downcast_rs::{impl_downcast, Downcast};
 use std::{
 	collections::{HashMap, HashSet},
@@ -21,6 +21,9 @@ pub trait SceneObject: Downcast {
 	fn unmount(&mut self, _ctx: &mut MountContext) {}
 	fn transform(&self) -> Matrix4<f32> {
 		Matrix4::identity()
+	}
+	fn material(&self) -> Option<&dyn Material> {
+		None
 	}
 }
 impl_downcast!(SceneObject);
@@ -63,7 +66,7 @@ impl SceneUniforms {
 			entries: &[
 				// Camera
 				wgpu::BindGroupEntry {
-					binding: 0,
+					binding: CAMERA_BINDING,
 					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
 						buffer: &camera_buffer,
 						size: wgpu::BufferSize::new(camera_size),
@@ -72,7 +75,7 @@ impl SceneUniforms {
 				},
 				// Actors
 				wgpu::BindGroupEntry {
-					binding: 1,
+					binding: ACTOR_BINDING,
 					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
 						buffer: &actor_buffer,
 						size: wgpu::BufferSize::new(actor_size),
@@ -99,11 +102,10 @@ impl SceneUniforms {
 			.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[contents]));
 	}
 
-	fn set_actor(&self, ctx: &mut RenderContext, index: u64, model: Matrix4<f32>) {
+	fn set_actor(&self, ctx: &mut RenderContext, index: u64, contents: ActorUniform) {
 		let uniform_alignment =
 			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
 		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
-		let contents = ActorUniform { model };
 		ctx.queue.write_buffer(
 			&self.actor_buffer,
 			offset as _,
@@ -123,7 +125,7 @@ impl SceneUniforms {
 
 pub struct Scene {
 	objects: HashMap<ObjectID, Box<dyn SceneObject>>,
-	mounted: HashSet<ObjectID>,
+	added: HashSet<ObjectID>,
 	removed: HashSet<ObjectID>,
 	uniforms: Option<SceneUniforms>,
 }
@@ -132,7 +134,7 @@ impl Scene {
 	pub fn new() -> Self {
 		Self {
 			objects: HashMap::new(),
-			mounted: HashSet::new(),
+			added: HashSet::new(),
 			removed: HashSet::new(),
 			uniforms: None,
 		}
@@ -144,21 +146,43 @@ impl Scene {
 			.get_or_insert_with(|| SceneUniforms::new(ctx.device));
 
 		let mut mount_ctx = MountContext { device: ctx.device };
+
+		// Add flagged objects
+		for id in self.added.drain() {
+			if let Some(object) = self.objects.get_mut(&id) {
+				object.mount(&mut mount_ctx);
+			}
+		}
+
+		// Remove flagged objects
 		for id in self.removed.drain() {
 			if let Some(mut object) = self.objects.remove(&id) {
 				object.unmount(&mut mount_ctx);
 			}
 		}
 
+		// Update camera position
 		uniforms.set_camera(ctx, ctx.camera);
+
 		for (id, object) in &mut self.objects {
-			if !self.mounted.contains(id) {
-				object.mount(&mut mount_ctx);
-				self.mounted.insert(*id);
+			if let Some(material) = object
+				.material()
+				.and_then(|o| o.downcast_ref::<BasicMaterial>())
+			{
+				// Update object position
+				uniforms.set_actor(
+					ctx,
+					*id as _,
+					ActorUniform {
+						color: material.color,
+						model: object.transform(),
+					},
+				);
+
+				// Render object
+				uniforms.bind_actor(ctx, *id as _);
+				object.render(ctx);
 			}
-			uniforms.set_actor(ctx, *id as _, object.transform());
-			uniforms.bind_actor(ctx, *id as _);
-			object.render(ctx);
 		}
 	}
 
@@ -168,6 +192,7 @@ impl Scene {
 	{
 		let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 		self.objects.insert(id, Box::new(object));
+		self.added.insert(id);
 		id
 	}
 

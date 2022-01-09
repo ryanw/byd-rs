@@ -1,12 +1,10 @@
 use super::Uniform;
-use crate::{SimpleVertex, Vertex};
+use crate::{Pipeline, SimpleVertex, Vertex};
 use byd_derive::CastBytes;
-use cgmath::Matrix4;
-use std::mem::size_of;
+use cgmath::{Matrix4, Vector4};
 
-const CAMERA_BINDING: u32 = 0;
-const ACTOR_BINDING: u32 = 1;
-const MAX_ACTORS: u64 = 1024;
+pub const CAMERA_BINDING: u32 = 0;
+pub const ACTOR_BINDING: u32 = 1;
 
 #[derive(Copy, Clone, CastBytes)]
 pub struct CameraUniform {
@@ -18,6 +16,7 @@ impl Uniform for CameraUniform {}
 
 #[derive(Copy, Clone, CastBytes)]
 pub struct ActorUniform {
+	pub color: Vector4<f32>,
 	pub model: Matrix4<f32>,
 }
 impl Uniform for ActorUniform {}
@@ -113,13 +112,14 @@ impl SimplePipeline {
 			bind_group_layout,
 		}
 	}
+}
 
-	pub fn apply<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+impl Pipeline for SimplePipeline {
+	fn apply<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
 		render_pass.set_pipeline(&self.render_pipeline);
 	}
 
-	/// Get a reference to the simple pipeline's bind group layout.
-	pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+	fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
 		&self.bind_group_layout
 	}
 }

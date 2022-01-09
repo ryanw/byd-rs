@@ -1,10 +1,9 @@
 use crate::{
 	pipelines::{QuadPipeline, Vertex as QuadVertex},
-	Camera, RenderContext, Scene, Window,
+	Camera, Pipeline, RenderContext, Scene, Window,
 };
 use std::{
 	error::Error,
-	mem::size_of,
 	ops::{Deref, DerefMut},
 };
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -176,9 +175,9 @@ impl Renderer {
 					resolve_target: None,
 					ops: wgpu::Operations {
 						load: wgpu::LoadOp::Clear(wgpu::Color {
-							r: 1.0,
-							g: 0.1,
-							b: 0.6,
+							r: 0.05,
+							g: 0.05,
+							b: 0.05,
 							a: 1.0,
 						}),
 						store: true,

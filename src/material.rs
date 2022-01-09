@@ -1,6 +1,8 @@
 use crate::Color;
+use downcast_rs::{impl_downcast, Downcast};
 
-pub trait Material {}
+pub trait Material: Downcast {}
+impl_downcast!(Material);
 
 #[derive(Clone)]
 pub struct BasicMaterial {
