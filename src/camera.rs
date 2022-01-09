@@ -3,6 +3,7 @@ use std::f32::consts::PI;
 use cgmath::{Deg, EuclideanSpace, Euler, Matrix4, Point3, Rad, SquareMatrix, Transform, Vector3};
 
 pub trait Camera {
+	fn resize(&mut self, _width: f32, _height: f32) {}
 	fn view(&self) -> Matrix4<f32>;
 	fn projection(&self) -> Matrix4<f32> {
 		Matrix4::identity()
@@ -58,16 +59,6 @@ impl FreeCamera {
 		}
 	}
 
-	pub fn resize(&mut self, width: f32, height: f32) {
-		self.width = width;
-		self.height = height;
-		let aspect = width / height;
-		let fov = 45.0;
-		let near = 0.1;
-		let far = 1000.0;
-		self.projection = cgmath::perspective(Deg(fov), aspect, near, far);
-	}
-
 	pub fn resolution(&self) -> (f32, f32) {
 		(self.width, self.height)
 	}
@@ -113,5 +104,15 @@ impl Camera for FreeCamera {
 
 	fn projection(&self) -> Matrix4<f32> {
 		self.projection.clone()
+	}
+
+	fn resize(&mut self, width: f32, height: f32) {
+		self.width = width;
+		self.height = height;
+		let aspect = width / height;
+		let fov = 45.0;
+		let near = 0.1;
+		let far = 1000.0;
+		self.projection = cgmath::perspective(Deg(fov), aspect, near, far);
 	}
 }

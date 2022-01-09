@@ -146,11 +146,13 @@ impl Renderer {
 		self.quad = quad;
 	}
 
-	pub fn render<S>(&mut self, mut scene: S, camera: &dyn Camera) -> Result<(), Box<dyn Error>>
+	pub fn render<SR, CR, C>(&mut self, mut scene: SR, camera: CR) -> Result<(), Box<dyn Error>>
 	where
-		S: DerefMut<Target = Scene>,
+		SR: DerefMut<Target = Scene>,
+		CR: Deref<Target = C>,
+		C: Camera,
 	{
-		self.render_to_buffer(&mut *scene, camera)?;
+		self.render_to_buffer(&mut *scene, &*camera)?;
 		self.render_to_surface()?;
 
 		Ok(())

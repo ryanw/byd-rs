@@ -1,10 +1,9 @@
 use byd::{
-	BasicMaterial, Event, FreeCamera, Geometry, Mesh, MouseButton, Renderer, Scene, SimpleVertex,
-	Window,
+	BasicMaterial, Camera, Event, FreeCamera, Geometry, Mesh, MouseButton, Renderer, Scene,
+	SimpleVertex, Window,
 };
 use cgmath::{Euler, Matrix4, Rad, Vector3};
 use futures::executor::block_on;
-use rand::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -21,6 +20,7 @@ async fn async_main() {
 
 	let scene = Rc::new(RefCell::new(scene));
 	let renderer = Rc::new(RefCell::new(renderer));
+	let camera = Rc::new(RefCell::new(camera));
 
 	let update = {
 		let scene = scene.clone();
@@ -39,8 +39,12 @@ async fn async_main() {
 	let draw = {
 		let scene = scene.clone();
 		let renderer = renderer.clone();
+		let camera = camera.clone();
 		move |_| {
-			if let Err(error) = renderer.borrow_mut().render(scene.borrow_mut(), &camera) {
+			if let Err(error) = renderer
+				.borrow_mut()
+				.render(scene.borrow_mut(), camera.borrow())
+			{
 				log::error!("Error rendering scene: {:?}", error);
 			}
 		}
@@ -69,6 +73,7 @@ async fn async_main() {
 		Event::WindowResize(width, height) => {
 			log::debug!("Window resized {}x{}", width, height);
 			renderer.borrow_mut().resize(width, height);
+			camera.borrow_mut().resize(width as _, height as _);
 		}
 		_ => {}
 	});
