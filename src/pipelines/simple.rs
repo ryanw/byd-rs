@@ -1,5 +1,5 @@
 use super::Uniform;
-use crate::{Pipeline, SimpleVertex, Vertex};
+use crate::{Pipeline, SimpleVertex, Texture, Vertex};
 use byd_derive::CastBytes;
 use cgmath::{Matrix4, Vector4};
 
@@ -98,12 +98,18 @@ impl SimplePipeline {
 				polygon_mode: wgpu::PolygonMode::Fill,
 				unclipped_depth: false,
 			},
-			depth_stencil: None,
 			multisample: wgpu::MultisampleState {
 				count: 1,
 				mask: !0,
 				alpha_to_coverage_enabled: false,
 			},
+			depth_stencil: Some(wgpu::DepthStencilState {
+				format: Texture::DEPTH_FORMAT,
+				depth_write_enabled: true,
+				depth_compare: wgpu::CompareFunction::Less,
+				stencil: wgpu::StencilState::default(),
+				bias: wgpu::DepthBiasState::default(),
+			}),
 			multiview: None,
 		});
 

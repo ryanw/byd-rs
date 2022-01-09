@@ -40,6 +40,9 @@ pub use vertex::*;
 pub mod color;
 pub use color::*;
 
+pub mod texture;
+pub use texture::*;
+
 /*
 #[cfg(unix)]
 pub mod term;

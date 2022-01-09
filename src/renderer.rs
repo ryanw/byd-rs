@@ -1,6 +1,6 @@
 use crate::{
 	pipelines::{QuadPipeline, Vertex as QuadVertex},
-	Camera, Pipeline, RenderContext, Scene, Window,
+	Camera, Pipeline, RenderContext, Scene, Texture, Window,
 };
 use std::{
 	error::Error,
@@ -12,13 +12,13 @@ pub struct Renderer {
 	surface: Option<wgpu::Surface>,
 	adapter: wgpu::Adapter,
 	instance: wgpu::Instance,
-	texture: wgpu::Texture,
-	sampler: wgpu::Sampler,
-	view: wgpu::TextureView,
 	size: wgpu::Extent3d,
 	device: wgpu::Device,
 	queue: wgpu::Queue,
 	quad: Quad,
+
+	depth_texture: Texture,
+	screen_texture: Texture,
 }
 
 struct Quad {
@@ -50,48 +50,27 @@ impl Renderer {
 			.await
 			.expect("Failed to request device");
 
-		let texture_desc = wgpu::TextureDescriptor {
-			label: Some("Main render texture"),
-			size: wgpu::Extent3d {
-				width,
-				height,
-				depth_or_array_layers: 1,
-			},
-			mip_level_count: 1,
-			sample_count: 1,
-			dimension: wgpu::TextureDimension::D2,
-			format: wgpu::TextureFormat::Bgra8UnormSrgb,
-			usage: wgpu::TextureUsages::TEXTURE_BINDING
-				| wgpu::TextureUsages::COPY_SRC
-				| wgpu::TextureUsages::RENDER_ATTACHMENT,
-		};
-		let texture = device.create_texture(&texture_desc);
-		let view = texture.create_view(&Default::default());
-		let size = texture_desc.size;
-		let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-			label: Some("Main render texture sampler"),
-			address_mode_u: wgpu::AddressMode::ClampToEdge,
-			address_mode_v: wgpu::AddressMode::ClampToEdge,
-			address_mode_w: wgpu::AddressMode::ClampToEdge,
-			mag_filter: wgpu::FilterMode::Nearest,
-			min_filter: wgpu::FilterMode::Nearest,
-			mipmap_filter: wgpu::FilterMode::Nearest,
-			..Default::default()
-		});
+		let depth_texture = Texture::new_depth_texture(&device, width, height);
+		let screen_texture = Texture::new(&device, width, height, "Screen");
 
-		let quad = Quad::new(&device, &view, &sampler);
+		let quad = Quad::new(&device, &screen_texture.view, &screen_texture.sampler);
+
+		let size = wgpu::Extent3d {
+			width,
+			height,
+			depth_or_array_layers: 1,
+		};
 
 		Self {
 			surface: None,
 			quad,
 			adapter,
 			instance,
-			texture,
-			sampler,
-			view,
 			size,
 			device,
 			queue,
+			depth_texture,
+			screen_texture,
 		}
 	}
 
@@ -120,29 +99,15 @@ impl Renderer {
 		}
 
 		log::debug!("Resizing renderer texture {}x{}", width, height);
-		let texture_desc = wgpu::TextureDescriptor {
-			label: Some("Main render texture"),
-			size: wgpu::Extent3d {
-				width,
-				height,
-				depth_or_array_layers: 1,
-			},
-			mip_level_count: 1,
-			sample_count: 1,
-			dimension: wgpu::TextureDimension::D2,
-			format: wgpu::TextureFormat::Bgra8UnormSrgb,
-			usage: wgpu::TextureUsages::TEXTURE_BINDING
-				| wgpu::TextureUsages::COPY_SRC
-				| wgpu::TextureUsages::RENDER_ATTACHMENT,
-		};
-		let texture = self.device.create_texture(&texture_desc);
-		let view = texture.create_view(&Default::default());
-		let quad = Quad::new(&self.device, &view, &self.sampler);
+		self.screen_texture = Texture::new(&self.device, width, height, "Screen");
+		self.quad = Quad::new(
+			&self.device,
+			&self.screen_texture.view,
+			&self.screen_texture.sampler,
+		);
 
-		self.texture.destroy();
-		self.texture = texture;
-		self.view = view;
-		self.quad = quad;
+		log::debug!("Resizing depth texture");
+		self.depth_texture = Texture::new_depth_texture(&self.device, width, height);
 	}
 
 	pub fn render<SR, CR, C>(&mut self, mut scene: SR, camera: CR) -> Result<(), Box<dyn Error>>
@@ -171,7 +136,7 @@ impl Renderer {
 			let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				label: Some("Render Pass"),
 				color_attachments: &[wgpu::RenderPassColorAttachment {
-					view: &self.view,
+					view: &self.screen_texture.view,
 					resolve_target: None,
 					ops: wgpu::Operations {
 						load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -183,7 +148,14 @@ impl Renderer {
 						store: true,
 					},
 				}],
-				depth_stencil_attachment: None,
+				depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+					view: &self.depth_texture.view,
+					depth_ops: Some(wgpu::Operations {
+						load: wgpu::LoadOp::Clear(1.0),
+						store: true,
+					}),
+					stencil_ops: None,
+				}),
 			});
 
 			// Draw everything
