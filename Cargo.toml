@@ -16,6 +16,9 @@ bytemuck = "1.7"
 rand = "0.8"
 byd_derive = { path = "./byd_derive" }
 
+[dev-dependencies]
+noise = "0.7"
+
 [target.'cfg(unix)'.dependencies]
 mutunga = { path = "../mutunga" }
 

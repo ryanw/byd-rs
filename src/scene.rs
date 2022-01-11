@@ -1,8 +1,10 @@
 use crate::{
-	pipelines::{ActorUniform, CameraUniform, SimplePipeline, ACTOR_BINDING, CAMERA_BINDING},
-	BasicMaterial, Camera, Material, MountContext, Pipeline, RenderContext,
+	pipelines::{
+		ActorUniform, CameraUniform, LinePipeline, SimplePipeline, ACTOR_BINDING, CAMERA_BINDING,
+	},
+	BasicMaterial, Camera, Color, LineMaterial, Material, MountContext, Pipeline, RenderContext,
 };
-use cgmath::{Matrix4, SquareMatrix, Vector4};
+use cgmath::{Matrix4, SquareMatrix};
 use downcast_rs::{impl_downcast, Downcast};
 use std::{
 	collections::{HashMap, HashSet},
@@ -16,7 +18,7 @@ pub type ObjectID = usize;
 pub static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 
 pub trait SceneObject: Downcast {
-	fn render<'a>(&'a self, _ctx: &mut RenderContext<'a>) {}
+	fn render<'a>(&'a mut self, _ctx: &mut RenderContext<'a>) {}
 	fn mount(&mut self, _ctx: &mut MountContext) {}
 	fn unmount(&mut self, _ctx: &mut MountContext) {}
 	fn transform(&self) -> Matrix4<f32> {
@@ -27,6 +29,101 @@ pub trait SceneObject: Downcast {
 	}
 }
 impl_downcast!(SceneObject);
+
+pub struct DebugUniforms {
+	pipeline: LinePipeline,
+	bind_group: wgpu::BindGroup,
+	camera_buffer: wgpu::Buffer,
+	actor_buffer: wgpu::Buffer,
+}
+
+impl DebugUniforms {
+	pub fn new(device: &wgpu::Device) -> Self {
+		log::debug!("Building Debug Uniforms");
+		let pipeline = LinePipeline::new(device);
+
+		let uniform_alignment =
+			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+
+		let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Camera Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let actor_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Actor Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: MAX_ACTORS * uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let camera_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
+		let actor_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
+
+		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			label: Some("LinePipeline Bind Group"),
+			layout: pipeline.bind_group_layout(),
+			entries: &[
+				// Camera
+				wgpu::BindGroupEntry {
+					binding: CAMERA_BINDING,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &camera_buffer,
+						size: wgpu::BufferSize::new(camera_size),
+						offset: 0,
+					}),
+				},
+				// Actors
+				wgpu::BindGroupEntry {
+					binding: ACTOR_BINDING,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &actor_buffer,
+						size: wgpu::BufferSize::new(actor_size),
+						offset: 0,
+					}),
+				},
+			],
+		});
+
+		Self {
+			pipeline,
+			bind_group,
+			camera_buffer,
+			actor_buffer,
+		}
+	}
+
+	fn set_camera(&self, ctx: &mut RenderContext, camera: &dyn Camera) {
+		let contents = CameraUniform {
+			view: camera.view(),
+			projection: camera.projection(),
+		};
+		ctx.queue
+			.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[contents]));
+	}
+
+	fn set_actor(&self, ctx: &mut RenderContext, index: u64, contents: ActorUniform) {
+		let uniform_alignment =
+			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
+		ctx.queue.write_buffer(
+			&self.actor_buffer,
+			offset as _,
+			bytemuck::cast_slice(&[contents]),
+		);
+	}
+
+	fn bind_actor<'a>(&'a self, ctx: &mut RenderContext<'a>, index: u64) {
+		let render_pass = &mut ctx.render_pass;
+		let uniform_alignment =
+			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
+		self.pipeline.apply(render_pass);
+		render_pass.set_bind_group(0, &self.bind_group, &[offset]);
+	}
+}
 
 pub struct SceneUniforms {
 	pipeline: SimplePipeline,
@@ -61,7 +158,7 @@ impl SceneUniforms {
 		let actor_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
 
 		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("QuadPipeline Bind Group"),
+			label: Some("SimplePipeline Bind Group"),
 			layout: pipeline.bind_group_layout(),
 			entries: &[
 				// Camera
@@ -128,6 +225,7 @@ pub struct Scene {
 	added: HashSet<ObjectID>,
 	removed: HashSet<ObjectID>,
 	uniforms: Option<SceneUniforms>,
+	debug_uniforms: Option<DebugUniforms>,
 }
 
 impl Scene {
@@ -137,6 +235,7 @@ impl Scene {
 			added: HashSet::new(),
 			removed: HashSet::new(),
 			uniforms: None,
+			debug_uniforms: None,
 		}
 	}
 
@@ -144,6 +243,9 @@ impl Scene {
 		let uniforms = self
 			.uniforms
 			.get_or_insert_with(|| SceneUniforms::new(ctx.device));
+		let debug_uniforms = self
+			.debug_uniforms
+			.get_or_insert_with(|| DebugUniforms::new(ctx.device));
 
 		let mut mount_ctx = MountContext { device: ctx.device };
 
@@ -163,25 +265,39 @@ impl Scene {
 
 		// Update camera position
 		uniforms.set_camera(ctx, ctx.camera);
+		debug_uniforms.set_camera(ctx, ctx.camera);
 
 		for (id, object) in &mut self.objects {
-			if let Some(material) = object
-				.material()
-				.and_then(|o| o.downcast_ref::<BasicMaterial>())
-			{
-				// Update object position
-				uniforms.set_actor(
-					ctx,
-					*id as _,
-					ActorUniform {
-						color: material.color,
-						model: object.transform(),
-					},
-				);
+			if let Some(material) = object.material() {
+				if let Some(material) = material.downcast_ref::<BasicMaterial>() {
+					// Update object position
+					uniforms.set_actor(
+						ctx,
+						*id as _,
+						ActorUniform {
+							color: material.color,
+							model: object.transform(),
+						},
+					);
 
-				// Render object
-				uniforms.bind_actor(ctx, *id as _);
-				object.render(ctx);
+					// Render object
+					uniforms.bind_actor(ctx, *id as _);
+					object.render(ctx);
+				} else if let Some(_material) = material.downcast_ref::<LineMaterial>() {
+					// Update object position
+					debug_uniforms.set_actor(
+						ctx,
+						*id as _,
+						ActorUniform {
+							color: Color::new(1.0, 0.0, 1.0, 1.0),
+							model: object.transform(),
+						},
+					);
+
+					// Render object
+					debug_uniforms.bind_actor(ctx, *id as _);
+					object.render(ctx);
+				}
 			}
 		}
 	}

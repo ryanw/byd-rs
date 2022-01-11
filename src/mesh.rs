@@ -1,6 +1,6 @@
 use crate::{BasicMaterial, Geometry, Material, MountContext, RenderContext, SceneObject, Vertex};
 use byd_derive::CastBytes;
-use cgmath::{EuclideanSpace, InnerSpace, Matrix4, Point3, SquareMatrix, Vector3};
+use cgmath::{EuclideanSpace, Matrix4, Point3, SquareMatrix, Vector3};
 use std::mem::size_of;
 use wgpu::VertexFormat::{Float32x3, Float32x4};
 
@@ -61,7 +61,7 @@ impl<V: Vertex> Mesh<V> {
 }
 
 impl<V: Vertex> SceneObject for Mesh<V> {
-	fn render<'a>(&'a self, ctx: &mut RenderContext<'a>) {
+	fn render<'a>(&'a mut self, ctx: &mut RenderContext<'a>) {
 		if let Some(buffer) = self.geometry.vertex_buffer() {
 			let render_pass = &mut ctx.render_pass;
 			let len = self.geometry.vertex_count() as u32;

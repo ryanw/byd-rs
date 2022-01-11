@@ -27,9 +27,9 @@ impl<V: Vertex> Clone for Geometry<V> {
 }
 
 impl<V: Vertex> Geometry<V> {
-	pub fn new() -> Self {
+	pub fn new(vertices: Vec<V>) -> Self {
 		Self {
-			vertices: vec![],
+			vertices,
 			vertex_buffer: None,
 		}
 	}

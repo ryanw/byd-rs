@@ -16,3 +16,14 @@ impl BasicMaterial {
 		Self { color }
 	}
 }
+
+#[derive(Clone)]
+pub struct LineMaterial {}
+
+impl Material for LineMaterial {}
+
+impl LineMaterial {
+	pub fn new() -> Self {
+		Self {}
+	}
+}

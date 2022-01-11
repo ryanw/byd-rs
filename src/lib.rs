@@ -43,6 +43,9 @@ pub use color::*;
 pub mod texture;
 pub use texture::*;
 
+mod debug_normal;
+pub use debug_normal::*;
+
 /*
 #[cfg(unix)]
 pub mod term;

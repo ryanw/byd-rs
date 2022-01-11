@@ -1,5 +1,7 @@
 mod simple;
 pub use simple::*;
+mod line;
+pub use line::LinePipeline;
 mod quad;
 pub use quad::*;
 use std::mem::size_of_val;

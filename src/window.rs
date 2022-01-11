@@ -1,8 +1,5 @@
 use crate::{Event, Key, MouseButton};
-use std::{
-	collections::HashSet,
-	time::{self, Instant},
-};
+use std::{collections::HashSet, time::Instant};
 #[cfg(target_os = "linux")]
 use winit::platform::unix::WindowBuilderExtUnix;
 use winit::{
@@ -50,7 +47,6 @@ impl Window {
 		let mut held_buttons: HashSet<MouseButton> = HashSet::new();
 
 		let mut mouse_pos = (0.0, 0.0);
-		let start_at = time::Instant::now();
 		let mut last_update_at = Instant::now();
 		let event_proxy = event_loop.create_proxy();
 		event_loop.run(move |event, _, control_flow| {

@@ -53,7 +53,7 @@ impl Renderer {
 		let depth_texture = Texture::new_depth_texture(&device, width, height);
 		let screen_texture = Texture::new(&device, width, height, "Screen");
 
-		let quad = Quad::new(&device, &screen_texture.view, &screen_texture.sampler);
+		let quad = Quad::new(&device, &screen_texture);
 
 		let size = wgpu::Extent3d {
 			width,
@@ -100,11 +100,7 @@ impl Renderer {
 
 		log::debug!("Resizing renderer texture {}x{}", width, height);
 		self.screen_texture = Texture::new(&self.device, width, height, "Screen");
-		self.quad = Quad::new(
-			&self.device,
-			&self.screen_texture.view,
-			&self.screen_texture.sampler,
-		);
+		self.quad.set_texture(&self.device, &self.screen_texture);
 
 		log::debug!("Resizing depth texture");
 		self.depth_texture = Texture::new_depth_texture(&self.device, width, height);
@@ -219,11 +215,7 @@ impl Renderer {
 }
 
 impl Quad {
-	fn new(
-		device: &wgpu::Device,
-		texture_view: &wgpu::TextureView,
-		sampler: &wgpu::Sampler,
-	) -> Self {
+	fn new(device: &wgpu::Device, texture: &Texture) -> Self {
 		let pipeline = QuadPipeline::new(device);
 		let buffer = device.create_buffer_init(&BufferInitDescriptor {
 			label: Some("Quad Vertex Buffer"),
@@ -236,11 +228,11 @@ impl Quad {
 			entries: &[
 				wgpu::BindGroupEntry {
 					binding: 0,
-					resource: wgpu::BindingResource::TextureView(texture_view),
+					resource: wgpu::BindingResource::TextureView(&texture.view),
 				},
 				wgpu::BindGroupEntry {
 					binding: 1,
-					resource: wgpu::BindingResource::Sampler(sampler),
+					resource: wgpu::BindingResource::Sampler(&texture.sampler),
 				},
 			],
 		});
@@ -257,6 +249,23 @@ impl Quad {
 		render_pass.set_bind_group(0, &self.bind_group, &[]);
 		render_pass.set_vertex_buffer(0, self.buffer.slice(..));
 		render_pass.draw(0..QUAD_VERTICES.len() as _, 0..1);
+	}
+
+	fn set_texture(&mut self, device: &wgpu::Device, texture: &Texture) {
+		self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			label: Some("QuadPipeline Bind Group"),
+			layout: self.pipeline.bind_group_layout(),
+			entries: &[
+				wgpu::BindGroupEntry {
+					binding: 0,
+					resource: wgpu::BindingResource::TextureView(&texture.view),
+				},
+				wgpu::BindGroupEntry {
+					binding: 1,
+					resource: wgpu::BindingResource::Sampler(&texture.sampler),
+				},
+			],
+		});
 	}
 }
 

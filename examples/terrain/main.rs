@@ -1,9 +1,11 @@
 mod app;
 use app::*;
 use futures::executor::block_on;
+mod terrain;
+pub use terrain::*;
 
 async fn async_main() {
-	App::new(1280, 720).await.run();
+	App::new(1024, 576).await.run();
 }
 
 fn main() {
