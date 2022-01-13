@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+
 use crate::Terrain;
 use byd::{
-	Camera, DebugNormals, Event, FreeCamera, Mesh, MouseButton, Renderer, Scene, SceneObject,
+	Camera, DebugNormals, Event, FreeCamera, Key, Mesh, MouseButton, Renderer, Scene, SceneObject,
 	SimpleVertex, Window,
 };
 use cgmath::{Euler, Matrix4, Rad, Vector3};
@@ -9,11 +11,14 @@ pub struct App {
 	window: Option<Window>,
 	scene: Scene,
 	camera: FreeCamera,
+	camera_velocity: Vector3<f32>,
+	camera_dampening: Vector3<f32>,
 	renderer: Renderer,
 	terrain: Terrain,
 	terrain_id: usize,
 
 	debug_normals_id: usize,
+	held_keys: HashSet<Key>,
 }
 
 impl App {
@@ -32,26 +37,20 @@ impl App {
 			window: Some(window),
 			scene,
 			camera,
+			camera_velocity: Vector3::new(0.0, 0.0, 0.0),
+			camera_dampening: Vector3::new(5.0, 5.0, 5.0),
 			renderer,
 			terrain,
 			terrain_id: 0,
 			debug_normals_id: 0,
+			held_keys: HashSet::with_capacity(16),
 		}
 	}
 }
 
 impl App {
 	pub fn update(&mut self, dt: f32) {
-		self.scene
-			.with_object_mut(self.terrain_id, |obj: &mut Mesh<SimpleVertex>| {
-				obj.transform = obj.transform
-					* Matrix4::from(Euler::new(Rad(0.0), Rad(1.0 * dt), Rad(0.0 * dt)));
-			});
-		self.scene
-			.with_object_mut(self.debug_normals_id, |obj: &mut DebugNormals| {
-				obj.transform = obj.transform
-					* Matrix4::from(Euler::new(Rad(0.0), Rad(1.0 * dt), Rad(0.0 * dt)));
-			});
+		self.update_camera(dt);
 	}
 
 	pub fn render(&mut self, _dt: f32) {
@@ -72,7 +71,23 @@ impl App {
 		self.debug_normals_id = self.scene.add(debug_normals);
 
 		let window = self.window.take().unwrap();
-		window.run(move |event, _| match event {
+		let mut grabbed = false;
+
+		window.run(move |event, ctx| match event {
+			Event::KeyDown(Key::Space) => {
+				self.held_keys = ctx.held_keys().clone();
+				grabbed = !grabbed;
+				if grabbed {
+					ctx.grab_mouse();
+				} else {
+					ctx.release_mouse();
+				}
+			}
+			Event::KeyDown(_) => self.held_keys = ctx.held_keys().clone(),
+			Event::KeyUp(_) => self.held_keys = ctx.held_keys().clone(),
+			Event::MouseMotion(x, y) => {
+				self.camera.rotate(y / 500.0, x / 500.0, 0.0);
+			}
 			Event::MouseDown(MouseButton::Left, _x, _y) => {}
 			Event::MouseDown(MouseButton::Right, _x, _y) => {}
 			Event::Draw(elapsed) => {
@@ -87,5 +102,50 @@ impl App {
 			}
 			_ => {}
 		});
+	}
+
+	fn update_camera(&mut self, dt: f32) {
+		self.dampen_camera(dt);
+		let camera_speed = 50.0;
+
+		if self.held_keys.contains(&Key::W) {
+			self.camera_velocity.z = camera_speed;
+		}
+		if self.held_keys.contains(&Key::A) {
+			self.camera_velocity.x = -camera_speed;
+		}
+		if self.held_keys.contains(&Key::S) {
+			self.camera_velocity.z = -camera_speed;
+		}
+		if self.held_keys.contains(&Key::D) {
+			self.camera_velocity.x = camera_speed;
+		}
+		if self.held_keys.contains(&Key::Q) {
+			self.camera_velocity.y = -camera_speed;
+		}
+		if self.held_keys.contains(&Key::E) {
+			self.camera_velocity.y = camera_speed;
+		}
+		self.camera.translate(
+			self.camera_velocity.x * dt,
+			self.camera_velocity.y * dt,
+			self.camera_velocity.z * dt,
+		);
+	}
+
+	fn dampen_camera(&mut self, dt: f32) {
+		self.camera_velocity.x *= 1.0 - self.camera_dampening.x * dt;
+		self.camera_velocity.y *= 1.0 - self.camera_dampening.y * dt;
+		self.camera_velocity.z *= 1.0 - self.camera_dampening.z * dt;
+		let min = 1.0;
+		if self.camera_velocity.x.abs() < min {
+			self.camera_velocity.x = 0.0;
+		}
+		if self.camera_velocity.y.abs() < min {
+			self.camera_velocity.y = 0.0;
+		}
+		if self.camera_velocity.z.abs() < min {
+			self.camera_velocity.z = 0.0;
+		}
 	}
 }

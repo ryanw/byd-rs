@@ -12,9 +12,34 @@ use winit::{
 	window::{Window as WinitWindow, WindowBuilder},
 };
 
+pub struct WindowContext<'a> {
+	grabbed: &'a mut bool,
+	window: &'a mut WinitWindow,
+	held_keys: &'a HashSet<Key>,
+}
+
 pub struct Window {
 	event_loop: EventLoop<Event>,
 	pub(crate) winit: WinitWindow,
+}
+
+impl<'a> WindowContext<'a> {
+	pub fn grab_mouse(&mut self) {
+		*self.grabbed = true;
+		let _ = self.window.set_cursor_grab(true);
+		self.window.set_cursor_visible(false);
+	}
+
+	pub fn release_mouse(&mut self) {
+		*self.grabbed = false;
+		let _ = self.window.set_cursor_grab(false);
+		self.window.set_cursor_visible(true);
+	}
+
+	/// Get the window context's held keys.
+	pub fn held_keys(&self) -> &HashSet<Key> {
+		self.held_keys
+	}
 }
 
 impl Window {
@@ -37,12 +62,12 @@ impl Window {
 
 	pub fn run<F>(self, mut event_handler: F)
 	where
-		F: 'static + FnMut(Event, &mut ControlFlow),
+		F: 'static + FnMut(Event, &mut WindowContext),
 	{
 		let event_loop = self.event_loop;
-		let window = self.winit;
+		let mut window = self.winit;
 
-		let grabbed = false;
+		let mut grabbed = false;
 		let mut held_keys: HashSet<Key> = HashSet::new();
 		let mut held_buttons: HashSet<MouseButton> = HashSet::new();
 
@@ -179,7 +204,12 @@ impl Window {
 				},
 
 				WinitEvent::UserEvent(user_event) => {
-					event_handler(user_event, control_flow);
+					let mut ctx = WindowContext {
+						grabbed: &mut grabbed,
+						window: &mut window,
+						held_keys: &held_keys,
+					};
+					event_handler(user_event, &mut ctx);
 				}
 				_ => {}
 			};

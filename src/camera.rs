@@ -36,11 +36,19 @@ impl FreeCamera {
 
 	pub fn translate(&mut self, x: f32, y: f32, z: f32) {
 		let trans = Matrix4::from_translation(Vector3::new(x, y, z));
-		let rotate: Matrix4<f32> = self.rotation.into();
+		let rotate = self.rotation_matrix();
 		let rotate_inv = rotate.inverse_transform().unwrap();
 
-		let new_pos = (trans * rotate).transform_point(self.position);
-		self.position = rotate_inv.transform_point(new_pos);
+		let new_pos = (trans * rotate_inv).transform_point(self.position);
+		self.position = rotate.transform_point(new_pos);
+	}
+
+	pub fn rotation_matrix(&self) -> Matrix4<f32> {
+		let x: Matrix4<f32> = Euler::new(self.rotation.x, Rad(0.0), Rad(0.0)).into();
+		let y: Matrix4<f32> = Euler::new(Rad(0.0), self.rotation.y, Rad(0.0)).into();
+		let z: Matrix4<f32> = Euler::new(Rad(0.0), Rad(0.0), self.rotation.z).into();
+
+		z * y * x
 	}
 
 	pub fn rotate(&mut self, x: f32, y: f32, z: f32) {
@@ -97,7 +105,7 @@ impl FreeCamera {
 impl Camera for FreeCamera {
 	fn view(&self) -> Matrix4<f32> {
 		let translate: Matrix4<f32> = Matrix4::from_translation(self.position.to_vec());
-		let rotate: Matrix4<f32> = self.rotation.into();
+		let rotate = self.rotation_matrix();
 
 		(translate * rotate).inverse_transform().unwrap()
 	}

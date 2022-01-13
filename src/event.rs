@@ -15,6 +15,7 @@ pub enum MouseButton {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Key {
 	Unknown,
+	Escape,
 	LShift,
 	RShift,
 	Space,
@@ -91,6 +92,7 @@ pub enum Event {
 impl From<VirtualKeyCode> for Key {
 	fn from(other: VirtualKeyCode) -> Key {
 		match other {
+			VirtualKeyCode::Escape => Key::Escape,
 			VirtualKeyCode::Left => Key::Left,
 			VirtualKeyCode::Right => Key::Right,
 			VirtualKeyCode::Up => Key::Up,
