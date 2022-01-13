@@ -19,8 +19,8 @@ byd_derive = { path = "./byd_derive" }
 [dev-dependencies]
 noise = "0.7"
 
-[target.'cfg(unix)'.dependencies]
-mutunga = { path = "../mutunga" }
+#[target.'cfg(unix)'.dependencies]
+#mutunga = { path = "../mutunga" }
 
 [build-dependencies]
 glob = "0.3"
