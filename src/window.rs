@@ -74,6 +74,7 @@ impl Window {
 		let mut mouse_pos = (0.0, 0.0);
 		let mut last_update_at = Instant::now();
 		let event_proxy = event_loop.create_proxy();
+		let mut tick = 0;
 		event_loop.run(move |event, _, control_flow| {
 			*control_flow = ControlFlow::Poll;
 			match event {
@@ -85,6 +86,14 @@ impl Window {
 					event_proxy
 						.send_event(Event::Draw(last_update_at.elapsed()))
 						.expect("Failed to send event");
+					tick += 1;
+					if tick > 100 {
+						tick = 0;
+						let elapsed = last_update_at.elapsed().as_secs_f32();
+						let fps = (1.0 / elapsed) as u32;
+
+						log::debug!("Frame rate: {} ({:?})", fps, last_update_at.elapsed());
+					}
 					last_update_at = Instant::now();
 				}
 
