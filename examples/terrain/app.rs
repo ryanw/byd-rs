@@ -25,7 +25,8 @@ impl App {
 		let terrain = Terrain::new();
 
 		let mut camera = FreeCamera::new();
-		camera.rotate(-0.3, 0.0, 0.0);
+		camera.translate(0.0, 10.0, -10.0);
+		camera.rotate(0.3, 0.0, 0.0);
 
 		Self {
 			window: Some(window),
@@ -61,7 +62,7 @@ impl App {
 
 	pub fn run(mut self) {
 		let mut terrain = self.terrain.generate_mesh(0, 0);
-		terrain.transform = Matrix4::from_translation(Vector3::new(0.0, -4.0, -20.0));
+		terrain.transform = Matrix4::from_translation(Vector3::new(0.0, 0.0, 50.0));
 
 		let mut debug_normals = DebugNormals::new();
 		debug_normals.transform = terrain.transform();

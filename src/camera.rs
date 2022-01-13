@@ -24,7 +24,7 @@ impl FreeCamera {
 		let mut camera = Self {
 			width: 1.0,
 			height: 1.0,
-			position: Point3::new(0.0, 0.0, -10.0),
+			position: Point3::new(0.0, 0.0, 0.0),
 			rotation: Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
 			projection: Matrix4::identity(),
 		};
@@ -99,7 +99,7 @@ impl Camera for FreeCamera {
 		let translate: Matrix4<f32> = Matrix4::from_translation(self.position.to_vec());
 		let rotate: Matrix4<f32> = self.rotation.into();
 
-		translate * rotate.inverse_transform().unwrap()
+		(translate * rotate).inverse_transform().unwrap()
 	}
 
 	fn projection(&self) -> Matrix4<f32> {
@@ -113,14 +113,8 @@ impl Camera for FreeCamera {
 		let fov = 45.0;
 		let near = 0.1;
 		let far = 1000.0;
-		self.projection = OPENGL_TO_WGPU_MATRIX * cgmath::perspective(Deg(fov), aspect, near, far);
+		// cgmath returns RH matrix, but we want LH, so we invert Z to flip it
+		self.projection = cgmath::perspective(Deg(fov), aspect, near, far)
+			* Matrix4::from_nonuniform_scale(1.0, 1.0, -1.0);
 	}
 }
-
-#[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-	1.0, 0.0, 0.0, 0.0,
-	0.0, 1.0, 0.0, 0.0,
-	0.0, 0.0, 0.5, 0.0,
-	0.0, 0.0, 0.5, 1.0,
-);

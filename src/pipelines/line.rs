@@ -92,7 +92,7 @@ impl LinePipeline {
 			primitive: wgpu::PrimitiveState {
 				topology: wgpu::PrimitiveTopology::LineList,
 				strip_index_format: None,
-				front_face: wgpu::FrontFace::Ccw,
+				front_face: wgpu::FrontFace::Cw,
 				cull_mode: None,
 				conservative: false,
 				polygon_mode: wgpu::PolygonMode::Fill,
