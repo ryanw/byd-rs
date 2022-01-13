@@ -80,11 +80,11 @@ impl App {
 	}
 
 	pub fn run(mut self) {
-		for _ in 0..2 {
+		for _ in 0..7 {
 			self.add_cube(
 				(rand::random::<f32>() - 0.5) * 20.0,
 				(rand::random::<f32>() - 0.5) * 20.0,
-				rand::random::<f32>() * -20.0,
+				rand::random::<f32>() * 20.0,
 			);
 		}
 
@@ -94,7 +94,7 @@ impl App {
 				self.add_cube(
 					(rand::random::<f32>() - 0.5) * 20.0,
 					(rand::random::<f32>() - 0.5) * 20.0,
-					rand::random::<f32>() * -20.0,
+					rand::random::<f32>() * 20.0,
 				);
 			}
 			Event::MouseDown(MouseButton::Right, _x, _y) => {
