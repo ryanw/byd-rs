@@ -1,10 +1,9 @@
-use std::collections::HashSet;
-
-use crate::Terrain;
 use byd::{
-	Camera, DebugNormals, Event, FreeCamera, Key, MouseButton, Renderer, Scene, SceneObject, Window,
+	BasicMaterial, Camera, Color, Event, FreeCamera, Geometry, Key, Mesh, MouseButton, Renderer,
+	Scene, SimpleVertex, Texture, TextureMaterial, Window,
 };
-use cgmath::{Matrix4, Vector3};
+use cgmath::{Matrix4, Point2, Point3, Vector3};
+use std::collections::HashSet;
 
 pub struct App {
 	window: Option<Window>,
@@ -13,11 +12,9 @@ pub struct App {
 	camera_velocity: Vector3<f32>,
 	camera_dampening: Vector3<f32>,
 	renderer: Renderer,
-	terrain: Terrain,
-	terrain_id: usize,
-
-	debug_normals_id: usize,
 	held_keys: HashSet<Key>,
+	objects: Vec<usize>,
+	textures: Vec<usize>,
 }
 
 impl App {
@@ -26,7 +23,6 @@ impl App {
 		let mut renderer = Renderer::new(width, height).await;
 		renderer.attach(&window);
 		let scene = Scene::new();
-		let terrain = Terrain::new();
 
 		let mut camera = FreeCamera::new();
 		camera.translate(0.0, 10.0, -10.0);
@@ -39,35 +35,71 @@ impl App {
 			camera_velocity: Vector3::new(0.0, 0.0, 0.0),
 			camera_dampening: Vector3::new(5.0, 5.0, 5.0),
 			renderer,
-			terrain,
-			terrain_id: 0,
-			debug_normals_id: 0,
 			held_keys: HashSet::with_capacity(16),
+			objects: vec![],
+			textures: vec![],
 		}
 	}
 }
 
 impl App {
-	pub fn update(&mut self, dt: f32) {
+	fn update(&mut self, dt: f32) {
 		self.update_camera(dt);
 	}
 
-	pub fn render(&mut self, _dt: f32) {
+	fn render(&mut self, _dt: f32) {
 		if let Err(error) = self.renderer.render(&mut self.scene, &self.camera) {
 			log::error!("Error rendering scene: {:?}", error);
 		}
 	}
 
+	fn build_scene(&mut self) {
+		let mut floor = Mesh::new(
+			Geometry::new(vec![
+				SimpleVertex {
+					position: Point3::new(1.0, 0.0, -1.0),
+					uv: Point2::new(1.0, 0.0),
+					normal: Vector3::new(0.0, 1.0, 0.0),
+				},
+				SimpleVertex {
+					position: Point3::new(-1.0, 0.0, -1.0),
+					uv: Point2::new(0.0, 0.0),
+					normal: Vector3::new(0.0, 1.0, 0.0),
+				},
+				SimpleVertex {
+					position: Point3::new(1.0, 0.0, 1.0),
+					uv: Point2::new(1.0, 1.0),
+					normal: Vector3::new(0.0, 1.0, 0.0),
+				},
+				SimpleVertex {
+					position: Point3::new(-1.0, 0.0, 1.0),
+					uv: Point2::new(0.0, 1.0),
+					normal: Vector3::new(0.0, 1.0, 0.0),
+				},
+				SimpleVertex {
+					position: Point3::new(1.0, 0.0, 1.0),
+					uv: Point2::new(1.0, 1.0),
+					normal: Vector3::new(0.0, 1.0, 0.0),
+				},
+				SimpleVertex {
+					position: Point3::new(-1.0, 0.0, -1.0),
+					uv: Point2::new(0.0, 0.0),
+					normal: Vector3::new(0.0, 1.0, 0.0),
+				},
+			]),
+			TextureMaterial::new(1),
+		);
+		floor.transform =
+			Matrix4::from_translation(Vector3::new(0.0, 3.0, 0.0)) * Matrix4::from_scale(50.0);
+
+		self.scene
+			.load_texture_from_bytes(include_bytes!("./smooth-grass.png"))
+			.expect("Failed to load texture");
+		self.objects = vec![self.scene.add(floor)];
+	}
+
 	pub fn run(mut self) {
-		let mut terrain = self.terrain.generate_mesh(0, 0);
-		terrain.transform = Matrix4::from_translation(Vector3::new(0.0, 0.0, 50.0));
-
-		let mut debug_normals = DebugNormals::new();
-		debug_normals.transform = terrain.transform();
-		debug_normals.set_vertices(terrain.geometry().vertices());
-
-		self.terrain_id = self.scene.add(terrain);
-		self.debug_normals_id = self.scene.add(debug_normals);
+		self.build_scene();
 
 		let window = self.window.take().unwrap();
 		let mut grabbed = false;

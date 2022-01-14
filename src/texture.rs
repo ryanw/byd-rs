@@ -1,3 +1,9 @@
+use std::num::NonZeroU32;
+
+use image::{ImageBuffer, Rgba};
+
+use crate::RenderContext;
+
 pub struct Texture {
 	pub texture: wgpu::Texture,
 	pub view: wgpu::TextureView,
@@ -22,6 +28,7 @@ impl Texture {
 			format: wgpu::TextureFormat::Bgra8UnormSrgb,
 			usage: wgpu::TextureUsages::TEXTURE_BINDING
 				| wgpu::TextureUsages::COPY_SRC
+				| wgpu::TextureUsages::COPY_DST
 				| wgpu::TextureUsages::RENDER_ATTACHMENT,
 		};
 		let texture = device.create_texture(&desc);
@@ -80,5 +87,31 @@ impl Texture {
 			view,
 			sampler,
 		}
+	}
+
+	pub fn write(&self, queue: &mut wgpu::Queue, contents: &ImageBuffer<Rgba<u8>, Vec<u8>>) {
+		log::debug!("Writing texture to GPU");
+		let width = contents.width();
+		let height = contents.height();
+		let texture_size = wgpu::Extent3d {
+			width,
+			height,
+			depth_or_array_layers: 1,
+		};
+		queue.write_texture(
+			wgpu::ImageCopyTexture {
+				texture: &self.texture,
+				mip_level: 0,
+				origin: wgpu::Origin3d::ZERO,
+				aspect: wgpu::TextureAspect::All,
+			},
+			contents,
+			wgpu::ImageDataLayout {
+				offset: 0,
+				bytes_per_row: NonZeroU32::new(4 * width),
+				rows_per_image: NonZeroU32::new(height),
+			},
+			texture_size,
+		);
 	}
 }

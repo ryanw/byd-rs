@@ -73,7 +73,7 @@ impl LinePipeline {
 
 		log::debug!("Creating pipeline");
 		let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-			label: Some("Cube Render Pipeline"),
+			label: Some("Line Render Pipeline"),
 			layout: Some(&pipeline_layout),
 			vertex: wgpu::VertexState {
 				module: &shader_module,

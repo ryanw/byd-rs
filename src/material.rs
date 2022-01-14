@@ -12,7 +12,7 @@ pub struct BasicMaterial {
 impl Material for BasicMaterial {}
 
 impl BasicMaterial {
-	pub fn new(color: Color) -> Self {
+	pub const fn new(color: Color) -> Self {
 		Self { color }
 	}
 }
@@ -23,7 +23,20 @@ pub struct LineMaterial {}
 impl Material for LineMaterial {}
 
 impl LineMaterial {
-	pub fn new() -> Self {
+	pub const fn new() -> Self {
 		Self {}
+	}
+}
+
+#[derive(Clone)]
+pub struct TextureMaterial {
+	pub texture_id: usize,
+}
+
+impl Material for TextureMaterial {}
+
+impl TextureMaterial {
+	pub const fn new(texture_id: usize) -> Self {
+		Self { texture_id }
 	}
 }

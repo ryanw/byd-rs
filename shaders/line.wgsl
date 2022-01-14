@@ -28,7 +28,7 @@ var<uniform> actor: Actor;
 fn vs_main(
 	[[location(0)]] position: vec3<f32>,
 	[[location(1)]] normal: vec3<f32>,
-	[[location(2)]] color: vec4<f32>,
+	[[location(2)]] uv: vec2<f32>,
 ) -> VertexOutput {
 	var out: VertexOutput;
 
@@ -37,7 +37,7 @@ fn vs_main(
 	out.position = mvp * vec4<f32>(position, 1.0);
 	out.world_position = (actor.model * vec4<f32>(position, 1.0)).xyz;
 	out.normal = normalize((actor.model * vec4<f32>(normal, 0.0)).xyz);
-	out.color = color;
+	out.color = vec4<f32>(1.0, 1.0, 0.0, 1.0);
 
 	return out;
 }

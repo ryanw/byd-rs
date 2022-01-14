@@ -1,7 +1,7 @@
 use crate::{
 	Color, LineMaterial, Material, MountContext, RenderContext, SceneObject, SimpleVertex,
 };
-use cgmath::{Matrix4, Point3, SquareMatrix, Vector3};
+use cgmath::{Matrix4, Point2, Point3, SquareMatrix, Vector3};
 use std::mem::size_of_val;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
@@ -31,8 +31,7 @@ impl DebugNormals {
 				[
 					SimpleVertex {
 						position: v.position.clone(),
-						color: (0.0, 1.0, 0.0, 1.0),
-						normal: Vector3::new(0.0, 0.0, 0.0),
+						..Default::default()
 					},
 					SimpleVertex {
 						position: Point3::new(
@@ -40,8 +39,7 @@ impl DebugNormals {
 							v.position.y + v.normal.y * 0.5,
 							v.position.z + v.normal.z * 0.5,
 						),
-						color: (1.0, 1.0, 0.0, 1.0),
-						normal: Vector3::new(0.0, 0.0, 0.0),
+						..Default::default()
 					},
 				]
 			})

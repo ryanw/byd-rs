@@ -154,6 +154,8 @@ impl Renderer {
 				}),
 			});
 
+			scene.process_texture_queue(&self.device, &mut self.queue);
+
 			// Draw everything
 			let mut ctx = RenderContext {
 				device: &self.device,
@@ -161,10 +163,8 @@ impl Renderer {
 				render_pass,
 				camera,
 			};
-
 			scene.render(&mut ctx);
 		}
-
 		self.queue.submit(std::iter::once(encoder.finish()));
 
 		Ok(())

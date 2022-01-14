@@ -1,13 +1,13 @@
 use crate::{BasicMaterial, Geometry, Material, MountContext, RenderContext, SceneObject, Vertex};
 use byd_derive::CastBytes;
-use cgmath::{EuclideanSpace, Matrix4, Point3, SquareMatrix, Vector3};
+use cgmath::{EuclideanSpace, Matrix4, Point2, Point3, SquareMatrix, Vector3};
 use std::mem::size_of;
-use wgpu::VertexFormat::{Float32x3, Float32x4};
+use wgpu::VertexFormat::{Float32x2, Float32x3};
 
 #[derive(Clone)]
-pub struct Mesh<V: Vertex> {
+pub struct Mesh<V: Vertex, M: Material + Clone> {
 	geometry: Geometry<V>,
-	pub material: BasicMaterial,
+	pub material: M,
 	pub transform: Matrix4<f32>,
 }
 
@@ -16,7 +16,17 @@ pub struct Mesh<V: Vertex> {
 pub struct SimpleVertex {
 	pub position: Point3<f32>,
 	pub normal: Vector3<f32>,
-	pub color: (f32, f32, f32, f32),
+	pub uv: Point2<f32>,
+}
+
+impl Default for SimpleVertex {
+	fn default() -> Self {
+		Self {
+			position: Point3::new(0.0, 0.0, 0.0),
+			normal: Vector3::new(0.0, 0.0, 0.0),
+			uv: Point2::new(0.0, 0.0),
+		}
+	}
 }
 
 impl From<[f32; 3]> for SimpleVertex {
@@ -31,13 +41,13 @@ impl From<&[f32; 3]> for SimpleVertex {
 		Self {
 			normal: position.to_vec(),
 			position,
-			color: (1.0, 1.0, 0.0, 1.0),
+			uv: Point2::new(position[0], position[1]),
 		}
 	}
 }
 
-impl<V: Vertex> Mesh<V> {
-	pub fn new(geometry: Geometry<V>, material: BasicMaterial) -> Self {
+impl<V: Vertex, M: Material + Clone> Mesh<V, M> {
+	pub fn new(geometry: Geometry<V>, material: M) -> Self {
 		Self {
 			geometry,
 			material,
@@ -60,7 +70,7 @@ impl<V: Vertex> Mesh<V> {
 	}
 }
 
-impl<V: Vertex> SceneObject for Mesh<V> {
+impl<V: Vertex, M: Material + Clone> SceneObject for Mesh<V, M> {
 	fn render<'a>(&'a mut self, ctx: &mut RenderContext<'a>) {
 		if let Some(buffer) = self.geometry.vertex_buffer() {
 			let render_pass = &mut ctx.render_pass;
@@ -110,7 +120,7 @@ impl Vertex for SimpleVertex {
 				wgpu::VertexAttribute {
 					offset: (size_of::<Point3<f32>>() + size_of::<Vector3<f32>>()) as _,
 					shader_location: 2,
-					format: Float32x4,
+					format: Float32x2,
 				},
 			],
 		}

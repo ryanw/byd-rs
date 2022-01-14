@@ -15,6 +15,7 @@ downcast-rs = "1.2"
 bytemuck = "1.7"
 rand = "0.8"
 byd_derive = { path = "./byd_derive" }
+image = "0.23"
 
 [dev-dependencies]
 noise = "0.7"

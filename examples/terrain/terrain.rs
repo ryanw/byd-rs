@@ -13,7 +13,7 @@ impl Terrain {
 		Self { noise }
 	}
 
-	pub fn generate_mesh(&self, x_offset: u32, z_offset: u32) -> Mesh<SimpleVertex> {
+	pub fn generate_mesh(&self, x_offset: u32, z_offset: u32) -> Mesh<SimpleVertex, BasicMaterial> {
 		let mut vertices = vec![];
 		let width = 32;
 		let depth = 32;
@@ -45,8 +45,8 @@ impl Terrain {
 
 					vertices.push(SimpleVertex {
 						position,
-						color: (normal.x, normal.y, normal.z, 1.0),
 						normal,
+						..Default::default()
 					});
 				}
 			}
