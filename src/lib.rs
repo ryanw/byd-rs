@@ -28,6 +28,9 @@ pub use event::*;
 pub mod scene;
 pub use scene::*;
 
+pub mod scene_object;
+pub use scene_object::*;
+
 pub mod window;
 pub use window::*;
 

@@ -2,8 +2,7 @@ use std::collections::HashSet;
 
 use crate::Terrain;
 use byd::{
-	Camera, DebugNormals, Event, FreeCamera, Key, MouseButton, Renderer, Scene, SceneObject,
-	Texture, Window,
+	Camera, Event, FreeCamera, Key, MouseButton, Renderer, Scene, Texture, TextureMaterial, Window,
 };
 use cgmath::{Matrix4, Vector3};
 
@@ -16,8 +15,6 @@ pub struct App {
 	renderer: Renderer,
 	terrain: Terrain,
 	terrain_id: usize,
-
-	debug_normals_id: usize,
 	held_keys: HashSet<Key>,
 }
 
@@ -42,7 +39,6 @@ impl App {
 			renderer,
 			terrain,
 			terrain_id: 0,
-			debug_normals_id: 0,
 			held_keys: HashSet::with_capacity(16),
 		}
 	}
@@ -67,14 +63,13 @@ impl App {
 
 		let mut terrain = self.terrain.generate_mesh(0, 0);
 		terrain.transform = Matrix4::from_translation(Vector3::new(0.0, 0.0, 50.0));
-		terrain.material.texture_id = grass_texture_id;
-
-		let mut debug_normals = DebugNormals::new();
-		debug_normals.transform = terrain.transform();
-		debug_normals.set_vertices(terrain.geometry().vertices());
+		terrain
+			.material
+			.downcast_mut::<TextureMaterial>()
+			.unwrap()
+			.texture_id = grass_texture_id;
 
 		self.terrain_id = self.scene.add(terrain);
-		self.debug_normals_id = self.scene.add(debug_normals);
 
 		let window = self.window.take().unwrap();
 		let mut grabbed = false;

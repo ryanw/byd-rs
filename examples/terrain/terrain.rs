@@ -1,4 +1,4 @@
-use byd::{Color, Geometry, Mesh, SimpleVertex, TextureMaterial};
+use byd::{Geometry, Mesh, SimpleVertex, TextureMaterial};
 use cgmath::{InnerSpace, Point2, Point3, Vector3};
 use noise::{Fbm, MultiFractal, NoiseFn, Seedable};
 
@@ -13,11 +13,7 @@ impl Terrain {
 		Self { noise }
 	}
 
-	pub fn generate_mesh(
-		&self,
-		x_offset: u32,
-		z_offset: u32,
-	) -> Mesh<SimpleVertex, TextureMaterial> {
+	pub fn generate_mesh(&self, x_offset: u32, z_offset: u32) -> Mesh<SimpleVertex> {
 		let mut vertices = vec![];
 		let width = 32;
 		let depth = 32;

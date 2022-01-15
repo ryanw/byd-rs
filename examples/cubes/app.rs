@@ -10,7 +10,7 @@ pub struct App {
 	camera: FreeCamera,
 	renderer: Renderer,
 
-	cube: Mesh<SimpleVertex, BasicMaterial>,
+	cube: Mesh<SimpleVertex>,
 	cube_ids: Vec<usize>,
 }
 
@@ -21,7 +21,7 @@ impl App {
 		renderer.attach(&window);
 		let scene = Scene::new();
 		let camera = FreeCamera::new();
-		let mut cube: Mesh<SimpleVertex, _> = Mesh::new(
+		let mut cube: Mesh<SimpleVertex> = Mesh::new(
 			Geometry::cube(),
 			BasicMaterial::new(Color::new(1.0, 0.0, 1.0, 1.0)),
 		);
@@ -52,21 +52,23 @@ impl App {
 
 impl App {
 	pub fn add_cube(&mut self, x: f32, y: f32, z: f32) {
-		let mut cube = self.cube.clone();
-		cube.transform = Matrix4::from_translation(Vector3::new(x, y, z));
-		cube.material.color = Color::new(
-			rand::random::<f32>(),
-			rand::random::<f32>(),
-			rand::random::<f32>(),
-			1.0,
+		let mut cube = Mesh::new(
+			self.cube.geometry().clone(),
+			BasicMaterial::new(Color::new(
+				rand::random::<f32>(),
+				rand::random::<f32>(),
+				rand::random::<f32>(),
+				1.0,
+			)),
 		);
+		cube.transform = Matrix4::from_translation(Vector3::new(x, y, z));
 		self.cube_ids.push(self.scene.add(cube));
 	}
 
 	pub fn update(&mut self, dt: f32) {
 		for id in &self.cube_ids {
 			self.scene
-				.with_object_mut(*id, |cube: &mut Mesh<SimpleVertex, BasicMaterial>| {
+				.with_object_mut(*id, |cube: &mut Mesh<SimpleVertex>| {
 					cube.transform = cube.transform
 						* Matrix4::from(Euler::new(Rad(0.0), Rad(1.0 * dt), Rad(0.623 * dt)));
 				});

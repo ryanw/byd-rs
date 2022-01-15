@@ -3,286 +3,22 @@ use crate::{
 		ActorUniform, CameraUniform, LinePipeline, SimplePipeline, ACTOR_BINDING, CAMERA_BINDING,
 		SAMPLER_BINDING, TEXTURE_BINDING, TEXTURE_ENABLED_BINDING,
 	},
-	BasicMaterial, Camera, Color, LineMaterial, Material, MountContext, Pipeline, RenderContext,
+	BasicMaterial, Camera, Color, LineMaterial, MountContext, Pipeline, RenderContext, SceneObject,
 	Texture, TextureBuffer, TextureMaterial,
 };
-use cgmath::{Matrix4, SquareMatrix, Vector4};
-use downcast_rs::{impl_downcast, Downcast};
+use cgmath::Vector4;
 use std::{
 	collections::{HashMap, HashSet},
 	mem::size_of,
 	sync::atomic::{AtomicUsize, Ordering},
 };
 
-const MAX_ACTORS: u64 = 2048;
+const MAX_OBJECTS: u64 = 2048;
 
 pub type ObjectID = usize;
 pub type TextureID = usize;
 pub static NEXT_OBJECT_ID: AtomicUsize = AtomicUsize::new(1);
 pub static NEXT_TEXTURE_ID: AtomicUsize = AtomicUsize::new(0);
-pub static DEFAULT_MATERIAL: BasicMaterial = BasicMaterial::new(Color::new(1.0, 0.25, 0.1, 1.0));
-
-pub trait SceneObject: Downcast {
-	fn render<'a>(&'a mut self, _ctx: &mut RenderContext<'a>) {}
-	fn mount(&mut self, _ctx: &mut MountContext) {}
-	fn unmount(&mut self, _ctx: &mut MountContext) {}
-	fn transform(&self) -> Matrix4<f32> {
-		Matrix4::identity()
-	}
-	fn material(&self) -> &dyn Material {
-		&DEFAULT_MATERIAL
-	}
-}
-impl_downcast!(SceneObject);
-
-pub struct DebugUniforms {
-	pipeline: LinePipeline,
-	bind_group: wgpu::BindGroup,
-	camera_buffer: wgpu::Buffer,
-	actor_buffer: wgpu::Buffer,
-}
-
-impl DebugUniforms {
-	pub fn new(device: &wgpu::Device) -> Self {
-		log::debug!("Building Debug Uniforms");
-		let pipeline = LinePipeline::new(device);
-
-		let uniform_alignment =
-			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-
-		let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Camera Buffer"),
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size: uniform_alignment,
-			mapped_at_creation: false,
-		});
-
-		let actor_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Actor Buffer"),
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size: MAX_ACTORS * uniform_alignment,
-			mapped_at_creation: false,
-		});
-
-		let camera_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
-		let actor_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
-
-		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("LinePipeline Bind Group"),
-			layout: pipeline.bind_group_layout(),
-			entries: &[
-				// Camera
-				wgpu::BindGroupEntry {
-					binding: CAMERA_BINDING,
-					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-						buffer: &camera_buffer,
-						size: wgpu::BufferSize::new(camera_size),
-						offset: 0,
-					}),
-				},
-				// Actors
-				wgpu::BindGroupEntry {
-					binding: ACTOR_BINDING,
-					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-						buffer: &actor_buffer,
-						size: wgpu::BufferSize::new(actor_size),
-						offset: 0,
-					}),
-				},
-			],
-		});
-
-		Self {
-			pipeline,
-			bind_group,
-			camera_buffer,
-			actor_buffer,
-		}
-	}
-
-	fn set_camera(&self, ctx: &mut RenderContext, camera: &dyn Camera) {
-		let contents = CameraUniform {
-			view: camera.view(),
-			projection: camera.projection(),
-		};
-		ctx.queue
-			.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[contents]));
-	}
-
-	fn set_actor(&self, ctx: &mut RenderContext, index: u64, contents: ActorUniform) {
-		let uniform_alignment =
-			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
-		ctx.queue.write_buffer(
-			&self.actor_buffer,
-			offset as _,
-			bytemuck::cast_slice(&[contents]),
-		);
-	}
-
-	fn bind_actor<'a>(&'a self, ctx: &mut RenderContext<'a>, index: u64) {
-		let render_pass = &mut ctx.render_pass;
-		let uniform_alignment =
-			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
-		self.pipeline.apply(render_pass);
-		render_pass.set_bind_group(0, &self.bind_group, &[offset]);
-	}
-}
-
-pub struct SceneUniforms {
-	pipeline: SimplePipeline,
-	bind_group: wgpu::BindGroup,
-	texture_bind_groups: HashMap<TextureID, wgpu::BindGroup>,
-	camera_buffer: wgpu::Buffer,
-	actor_buffer: wgpu::Buffer,
-	enabled_buffer: wgpu::Buffer,
-}
-
-impl SceneUniforms {
-	pub fn new(device: &wgpu::Device, queue: &mut wgpu::Queue) -> Self {
-		log::debug!("Building Scene Uniforms");
-		let pipeline = SimplePipeline::new(device);
-
-		let uniform_alignment =
-			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-
-		let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Camera Buffer"),
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size: uniform_alignment,
-			mapped_at_creation: false,
-		});
-
-		let actor_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Actor Buffer"),
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size: MAX_ACTORS * uniform_alignment,
-			mapped_at_creation: false,
-		});
-
-		let enabled_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-			label: Some("Texture Enabled Buffer"),
-			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			size: 2 * uniform_alignment,
-			mapped_at_creation: false,
-		});
-
-		queue.write_buffer(&enabled_buffer, 0, bytemuck::cast_slice(&[0]));
-		queue.write_buffer(
-			&enabled_buffer,
-			uniform_alignment,
-			bytemuck::cast_slice(&[1]),
-		);
-
-		let camera_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
-		let actor_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
-
-		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("SimplePipeline Bind Group"),
-			layout: pipeline.bind_group_layout(),
-			entries: &[
-				// Camera
-				wgpu::BindGroupEntry {
-					binding: CAMERA_BINDING,
-					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-						buffer: &camera_buffer,
-						size: wgpu::BufferSize::new(camera_size),
-						offset: 0,
-					}),
-				},
-				// Actors
-				wgpu::BindGroupEntry {
-					binding: ACTOR_BINDING,
-					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-						buffer: &actor_buffer,
-						size: wgpu::BufferSize::new(actor_size),
-						offset: 0,
-					}),
-				},
-			],
-		});
-
-		Self {
-			pipeline,
-			bind_group,
-			texture_bind_groups: HashMap::new(),
-			camera_buffer,
-			actor_buffer,
-			enabled_buffer,
-		}
-	}
-
-	fn set_camera(&self, ctx: &mut RenderContext, camera: &dyn Camera) {
-		let contents = CameraUniform {
-			view: camera.view(),
-			projection: camera.projection(),
-		};
-		ctx.queue
-			.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[contents]));
-	}
-
-	fn set_actor(&self, ctx: &mut RenderContext, index: u64, contents: ActorUniform) {
-		let uniform_alignment =
-			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
-		ctx.queue.write_buffer(
-			&self.actor_buffer,
-			offset as _,
-			bytemuck::cast_slice(&[contents]),
-		);
-	}
-
-	fn bind_actor<'a>(&'a self, ctx: &mut RenderContext<'a>, index: u64) {
-		let render_pass = &mut ctx.render_pass;
-		let uniform_alignment =
-			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
-		self.pipeline.apply(render_pass);
-		render_pass.set_bind_group(0, &self.bind_group, &[offset]);
-	}
-
-	fn bind_texture<'a>(&'a self, ctx: &mut RenderContext<'a>, id: TextureID) {
-		if let Some(texture) = self.texture_bind_groups.get(&id) {
-			let uniform_alignment =
-				ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-			let is_enabled_offset =
-				(if id == 0 { 0 } else { uniform_alignment }) as wgpu::DynamicOffset;
-
-			ctx.render_pass
-				.set_bind_group(1, texture, &[is_enabled_offset]);
-		}
-	}
-
-	fn add_texture(&mut self, id: TextureID, device: &wgpu::Device, texture: &TextureBuffer) {
-		log::debug!("Creating BindGroup for texture {}", id);
-		self.texture_bind_groups.insert(
-			id,
-			device.create_bind_group(&wgpu::BindGroupDescriptor {
-				label: Some("SimplePipeline Texture Bind Group"),
-				layout: self.pipeline.texture_bind_group_layout(),
-				entries: &[
-					wgpu::BindGroupEntry {
-						binding: TEXTURE_ENABLED_BINDING,
-						resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-							buffer: &self.enabled_buffer,
-							size: wgpu::BufferSize::new(size_of::<u32>() as _),
-							offset: 0,
-						}),
-					},
-					wgpu::BindGroupEntry {
-						binding: TEXTURE_BINDING,
-						resource: wgpu::BindingResource::TextureView(&texture.view),
-					},
-					wgpu::BindGroupEntry {
-						binding: SAMPLER_BINDING,
-						resource: wgpu::BindingResource::Sampler(&texture.sampler),
-					},
-				],
-			}),
-		);
-	}
-}
 
 pub struct Scene {
 	objects: HashMap<ObjectID, Box<dyn SceneObject>>,
@@ -339,9 +75,7 @@ impl Scene {
 
 			// Remove flagged objects
 			for id in self.removed_textures.drain() {
-				if let Some(_texture) = self.textures.remove(&id) {
-					// Free automatically
-				}
+				self.textures.remove(&id);
 			}
 		}
 	}
@@ -471,5 +205,254 @@ impl Scene {
 		if let Some(obj) = self.get_mut(id).and_then(|obj| obj.downcast_mut::<O>()) {
 			handler(obj);
 		}
+	}
+}
+
+pub struct DebugUniforms {
+	pipeline: LinePipeline,
+	bind_group: wgpu::BindGroup,
+	camera_buffer: wgpu::Buffer,
+	actor_buffer: wgpu::Buffer,
+}
+
+impl DebugUniforms {
+	pub fn new(device: &wgpu::Device) -> Self {
+		log::debug!("Building Debug Uniforms");
+		let pipeline = LinePipeline::new(device);
+
+		let uniform_alignment =
+			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+
+		let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Camera Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let actor_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Actor Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: MAX_OBJECTS * uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let camera_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
+		let actor_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
+
+		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			label: Some("LinePipeline Bind Group"),
+			layout: pipeline.bind_group_layout(),
+			entries: &[
+				// Camera
+				wgpu::BindGroupEntry {
+					binding: CAMERA_BINDING,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &camera_buffer,
+						size: wgpu::BufferSize::new(camera_size),
+						offset: 0,
+					}),
+				},
+				// Actors
+				wgpu::BindGroupEntry {
+					binding: ACTOR_BINDING,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &actor_buffer,
+						size: wgpu::BufferSize::new(actor_size),
+						offset: 0,
+					}),
+				},
+			],
+		});
+
+		Self {
+			pipeline,
+			bind_group,
+			camera_buffer,
+			actor_buffer,
+		}
+	}
+
+	fn set_camera(&self, ctx: &mut RenderContext, camera: &dyn Camera) {
+		let contents = CameraUniform {
+			view: camera.view(),
+			projection: camera.projection(),
+		};
+		ctx.queue
+			.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[contents]));
+	}
+
+	fn set_actor(&self, ctx: &mut RenderContext, index: u64, contents: ActorUniform) {
+		let uniform_alignment =
+			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
+		ctx.queue.write_buffer(
+			&self.actor_buffer,
+			offset as _,
+			bytemuck::cast_slice(&[contents]),
+		);
+	}
+
+	fn bind_actor<'a>(&'a self, ctx: &mut RenderContext<'a>, index: u64) {
+		let render_pass = &mut ctx.render_pass;
+		let uniform_alignment =
+			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
+		self.pipeline.apply(render_pass);
+		render_pass.set_bind_group(0, &self.bind_group, &[offset]);
+	}
+}
+
+pub struct SceneUniforms {
+	pipeline: SimplePipeline,
+	bind_group: wgpu::BindGroup,
+	texture_bind_groups: HashMap<TextureID, wgpu::BindGroup>,
+	camera_buffer: wgpu::Buffer,
+	actor_buffer: wgpu::Buffer,
+	enabled_buffer: wgpu::Buffer,
+}
+
+impl SceneUniforms {
+	pub fn new(device: &wgpu::Device, queue: &mut wgpu::Queue) -> Self {
+		log::debug!("Building Scene Uniforms");
+		let pipeline = SimplePipeline::new(device);
+
+		let uniform_alignment =
+			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+
+		let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Camera Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let actor_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Actor Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: MAX_OBJECTS * uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		let enabled_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Texture Enabled Buffer"),
+			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			size: 2 * uniform_alignment,
+			mapped_at_creation: false,
+		});
+
+		queue.write_buffer(&enabled_buffer, 0, bytemuck::cast_slice(&[0]));
+		queue.write_buffer(
+			&enabled_buffer,
+			uniform_alignment,
+			bytemuck::cast_slice(&[1]),
+		);
+
+		let camera_size = size_of::<CameraUniform>() as wgpu::BufferAddress;
+		let actor_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
+
+		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			label: Some("SimplePipeline Bind Group"),
+			layout: pipeline.bind_group_layout(),
+			entries: &[
+				// Camera
+				wgpu::BindGroupEntry {
+					binding: CAMERA_BINDING,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &camera_buffer,
+						size: wgpu::BufferSize::new(camera_size),
+						offset: 0,
+					}),
+				},
+				// Actors
+				wgpu::BindGroupEntry {
+					binding: ACTOR_BINDING,
+					resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+						buffer: &actor_buffer,
+						size: wgpu::BufferSize::new(actor_size),
+						offset: 0,
+					}),
+				},
+			],
+		});
+
+		Self {
+			pipeline,
+			bind_group,
+			texture_bind_groups: HashMap::new(),
+			camera_buffer,
+			actor_buffer,
+			enabled_buffer,
+		}
+	}
+
+	fn set_camera(&self, ctx: &mut RenderContext, camera: &dyn Camera) {
+		let contents = CameraUniform {
+			view: camera.view(),
+			projection: camera.projection(),
+		};
+		ctx.queue
+			.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[contents]));
+	}
+
+	fn set_actor(&self, ctx: &mut RenderContext, index: u64, contents: ActorUniform) {
+		let uniform_alignment =
+			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
+		ctx.queue.write_buffer(
+			&self.actor_buffer,
+			offset as _,
+			bytemuck::cast_slice(&[contents]),
+		);
+	}
+
+	fn bind_actor<'a>(&'a self, ctx: &mut RenderContext<'a>, index: u64) {
+		let render_pass = &mut ctx.render_pass;
+		let uniform_alignment =
+			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+		let offset = (index * uniform_alignment) as wgpu::DynamicOffset;
+		self.pipeline.apply(render_pass);
+		render_pass.set_bind_group(0, &self.bind_group, &[offset]);
+	}
+
+	fn bind_texture<'a>(&'a self, ctx: &mut RenderContext<'a>, id: TextureID) {
+		if let Some(texture) = self.texture_bind_groups.get(&id) {
+			let uniform_alignment =
+				ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+			let is_enabled_offset =
+				(if id == 0 { 0 } else { uniform_alignment }) as wgpu::DynamicOffset;
+
+			ctx.render_pass
+				.set_bind_group(1, texture, &[is_enabled_offset]);
+		}
+	}
+
+	fn add_texture(&mut self, id: TextureID, device: &wgpu::Device, texture: &TextureBuffer) {
+		log::debug!("Creating BindGroup for texture {}", id);
+		self.texture_bind_groups.insert(
+			id,
+			device.create_bind_group(&wgpu::BindGroupDescriptor {
+				label: Some("SimplePipeline Texture Bind Group"),
+				layout: self.pipeline.texture_bind_group_layout(),
+				entries: &[
+					wgpu::BindGroupEntry {
+						binding: TEXTURE_ENABLED_BINDING,
+						resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+							buffer: &self.enabled_buffer,
+							size: wgpu::BufferSize::new(size_of::<u32>() as _),
+							offset: 0,
+						}),
+					},
+					wgpu::BindGroupEntry {
+						binding: TEXTURE_BINDING,
+						resource: wgpu::BindingResource::TextureView(&texture.view),
+					},
+					wgpu::BindGroupEntry {
+						binding: SAMPLER_BINDING,
+						resource: wgpu::BindingResource::Sampler(&texture.sampler),
+					},
+				],
+			}),
+		);
 	}
 }

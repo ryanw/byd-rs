@@ -4,10 +4,9 @@ use cgmath::{EuclideanSpace, Matrix4, Point2, Point3, SquareMatrix, Vector3};
 use std::mem::size_of;
 use wgpu::VertexFormat::{Float32x2, Float32x3};
 
-#[derive(Clone)]
-pub struct Mesh<V: Vertex, M: Material + Clone> {
+pub struct Mesh<V: Vertex> {
 	geometry: Geometry<V>,
-	pub material: M,
+	pub material: Box<dyn Material>,
 	pub transform: Matrix4<f32>,
 }
 
@@ -46,11 +45,11 @@ impl From<&[f32; 3]> for SimpleVertex {
 	}
 }
 
-impl<V: Vertex, M: Material + Clone> Mesh<V, M> {
-	pub fn new(geometry: Geometry<V>, material: M) -> Self {
+impl<V: Vertex> Mesh<V> {
+	pub fn new(geometry: Geometry<V>, material: impl Material) -> Self {
 		Self {
 			geometry,
-			material,
+			material: Box::new(material),
 			transform: Matrix4::identity(),
 		}
 	}
@@ -70,7 +69,7 @@ impl<V: Vertex, M: Material + Clone> Mesh<V, M> {
 	}
 }
 
-impl<V: Vertex, M: Material + Clone> SceneObject for Mesh<V, M> {
+impl<V: Vertex> SceneObject for Mesh<V> {
 	fn render<'a>(&'a mut self, ctx: &mut RenderContext<'a>) {
 		if let Some(buffer) = self.geometry.vertex_buffer() {
 			let render_pass = &mut ctx.render_pass;
@@ -97,7 +96,7 @@ impl<V: Vertex, M: Material + Clone> SceneObject for Mesh<V, M> {
 	}
 
 	fn material(&self) -> &dyn Material {
-		&self.material
+		&*self.material
 	}
 }
 
