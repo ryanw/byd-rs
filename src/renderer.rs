@@ -1,6 +1,6 @@
 use crate::{
 	pipelines::{QuadPipeline, Vertex as QuadVertex},
-	Camera, Pipeline, RenderContext, Scene, Texture, Window,
+	Camera, Pipeline, RenderContext, Scene, TextureBuffer, Window,
 };
 use std::{
 	error::Error,
@@ -17,8 +17,8 @@ pub struct Renderer {
 	queue: wgpu::Queue,
 	quad: Quad,
 
-	depth_texture: Texture,
-	screen_texture: Texture,
+	depth_texture: TextureBuffer,
+	screen_texture: TextureBuffer,
 }
 
 struct Quad {
@@ -50,8 +50,8 @@ impl Renderer {
 			.await
 			.expect("Failed to request device");
 
-		let depth_texture = Texture::new_depth_texture(&device, width, height);
-		let screen_texture = Texture::new(&device, width, height, "Screen");
+		let depth_texture = TextureBuffer::new_depth_texture(&device, width, height);
+		let screen_texture = TextureBuffer::new(&device, width, height, "Screen");
 
 		let quad = Quad::new(&device, &screen_texture);
 
@@ -99,11 +99,11 @@ impl Renderer {
 		}
 
 		log::debug!("Resizing renderer texture {}x{}", width, height);
-		self.screen_texture = Texture::new(&self.device, width, height, "Screen");
+		self.screen_texture = TextureBuffer::new(&self.device, width, height, "Screen");
 		self.quad.set_texture(&self.device, &self.screen_texture);
 
 		log::debug!("Resizing depth texture");
-		self.depth_texture = Texture::new_depth_texture(&self.device, width, height);
+		self.depth_texture = TextureBuffer::new_depth_texture(&self.device, width, height);
 	}
 
 	pub fn render<SR, CR, C>(&mut self, mut scene: SR, camera: CR) -> Result<(), Box<dyn Error>>
@@ -215,7 +215,7 @@ impl Renderer {
 }
 
 impl Quad {
-	fn new(device: &wgpu::Device, texture: &Texture) -> Self {
+	fn new(device: &wgpu::Device, texture: &TextureBuffer) -> Self {
 		let pipeline = QuadPipeline::new(device);
 		let buffer = device.create_buffer_init(&BufferInitDescriptor {
 			label: Some("Quad Vertex Buffer"),
@@ -251,7 +251,7 @@ impl Quad {
 		render_pass.draw(0..QUAD_VERTICES.len() as _, 0..1);
 	}
 
-	fn set_texture(&mut self, device: &wgpu::Device, texture: &Texture) {
+	fn set_texture(&mut self, device: &wgpu::Device, texture: &TextureBuffer) {
 		self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 			label: Some("QuadPipeline Bind Group"),
 			layout: self.pipeline.bind_group_layout(),

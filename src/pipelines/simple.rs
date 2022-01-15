@@ -1,5 +1,5 @@
 use super::Uniform;
-use crate::{Pipeline, SimpleVertex, Texture, Vertex};
+use crate::{Pipeline, SimpleVertex, TextureBuffer, Vertex};
 use byd_derive::CastBytes;
 use cgmath::{Matrix4, Vector4};
 
@@ -124,7 +124,7 @@ impl SimplePipeline {
 				module: &shader_module,
 				entry_point: "fs_main",
 				targets: &[wgpu::ColorTargetState {
-					format: wgpu::TextureFormat::Bgra8UnormSrgb, // FIXME ctx.swapchain_format(),
+					format: wgpu::TextureFormat::Rgba8UnormSrgb, // FIXME ctx.swapchain_format(),
 					blend: Some(wgpu::BlendState::REPLACE),
 					write_mask: wgpu::ColorWrites::ALL,
 				}],
@@ -144,7 +144,7 @@ impl SimplePipeline {
 				alpha_to_coverage_enabled: false,
 			},
 			depth_stencil: Some(wgpu::DepthStencilState {
-				format: Texture::DEPTH_FORMAT,
+				format: TextureBuffer::DEPTH_FORMAT,
 				depth_write_enabled: true,
 				depth_compare: wgpu::CompareFunction::Less,
 				stencil: wgpu::StencilState::default(),

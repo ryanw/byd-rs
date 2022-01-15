@@ -1,4 +1,4 @@
-use crate::{BasicMaterial, Geometry, Material, MountContext, RenderContext, SceneObject, Vertex};
+use crate::{Geometry, Material, MountContext, RenderContext, SceneObject, Vertex};
 use byd_derive::CastBytes;
 use cgmath::{EuclideanSpace, Matrix4, Point2, Point3, SquareMatrix, Vector3};
 use std::mem::size_of;
@@ -96,8 +96,8 @@ impl<V: Vertex, M: Material + Clone> SceneObject for Mesh<V, M> {
 		self.transform.clone()
 	}
 
-	fn material(&self) -> Option<&dyn Material> {
-		Some(&self.material)
+	fn material(&self) -> &dyn Material {
+		&self.material
 	}
 }
 

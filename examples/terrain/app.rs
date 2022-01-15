@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use crate::Terrain;
 use byd::{
-	Camera, DebugNormals, Event, FreeCamera, Key, MouseButton, Renderer, Scene, SceneObject, Window,
+	Camera, DebugNormals, Event, FreeCamera, Key, MouseButton, Renderer, Scene, SceneObject,
+	Texture, Window,
 };
 use cgmath::{Matrix4, Vector3};
 
@@ -59,8 +60,14 @@ impl App {
 	}
 
 	pub fn run(mut self) {
+		let grass_texture_id = self.scene.add_texture(
+			Texture::from_image_bytes(include_bytes!("./grass.png"))
+				.expect("Failed to load grass texture"),
+		);
+
 		let mut terrain = self.terrain.generate_mesh(0, 0);
 		terrain.transform = Matrix4::from_translation(Vector3::new(0.0, 0.0, 50.0));
+		terrain.material.texture_id = grass_texture_id;
 
 		let mut debug_normals = DebugNormals::new();
 		debug_normals.transform = terrain.transform();

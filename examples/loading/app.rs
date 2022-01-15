@@ -1,6 +1,6 @@
 use byd::{
-	BasicMaterial, Camera, Color, Event, FreeCamera, Geometry, Key, Mesh, MouseButton, Renderer,
-	Scene, SimpleVertex, Texture, TextureMaterial, Window,
+	Camera, Event, FreeCamera, Geometry, Key, Mesh, MouseButton, Renderer, Scene, SimpleVertex,
+	Texture, TextureMaterial, Window,
 };
 use cgmath::{Matrix4, Point2, Point3, Vector3};
 use std::collections::HashSet;
@@ -14,7 +14,6 @@ pub struct App {
 	renderer: Renderer,
 	held_keys: HashSet<Key>,
 	objects: Vec<usize>,
-	textures: Vec<usize>,
 }
 
 impl App {
@@ -37,7 +36,6 @@ impl App {
 			renderer,
 			held_keys: HashSet::with_capacity(16),
 			objects: vec![],
-			textures: vec![],
 		}
 	}
 }
@@ -54,47 +52,48 @@ impl App {
 	}
 
 	fn build_scene(&mut self) {
+		let texture_id = self.scene.add_texture(
+			Texture::from_image_bytes(include_bytes!("../../assets/checker.tif"))
+				.expect("Failed to load texture"),
+		);
 		let mut floor = Mesh::new(
 			Geometry::new(vec![
 				SimpleVertex {
 					position: Point3::new(1.0, 0.0, -1.0),
-					uv: Point2::new(1.0, 0.0),
-					normal: Vector3::new(0.0, 1.0, 0.0),
-				},
-				SimpleVertex {
-					position: Point3::new(-1.0, 0.0, -1.0),
-					uv: Point2::new(0.0, 0.0),
-					normal: Vector3::new(0.0, 1.0, 0.0),
-				},
-				SimpleVertex {
-					position: Point3::new(1.0, 0.0, 1.0),
 					uv: Point2::new(1.0, 1.0),
 					normal: Vector3::new(0.0, 1.0, 0.0),
 				},
 				SimpleVertex {
-					position: Point3::new(-1.0, 0.0, 1.0),
+					position: Point3::new(-1.0, 0.0, -1.0),
 					uv: Point2::new(0.0, 1.0),
 					normal: Vector3::new(0.0, 1.0, 0.0),
 				},
 				SimpleVertex {
 					position: Point3::new(1.0, 0.0, 1.0),
-					uv: Point2::new(1.0, 1.0),
+					uv: Point2::new(1.0, 0.0),
+					normal: Vector3::new(0.0, 1.0, 0.0),
+				},
+				SimpleVertex {
+					position: Point3::new(-1.0, 0.0, 1.0),
+					uv: Point2::new(0.0, 0.0),
+					normal: Vector3::new(0.0, 1.0, 0.0),
+				},
+				SimpleVertex {
+					position: Point3::new(1.0, 0.0, 1.0),
+					uv: Point2::new(1.0, 0.0),
 					normal: Vector3::new(0.0, 1.0, 0.0),
 				},
 				SimpleVertex {
 					position: Point3::new(-1.0, 0.0, -1.0),
-					uv: Point2::new(0.0, 0.0),
+					uv: Point2::new(0.0, 1.0),
 					normal: Vector3::new(0.0, 1.0, 0.0),
 				},
 			]),
-			TextureMaterial::new(1),
+			TextureMaterial::new(texture_id),
 		);
 		floor.transform =
 			Matrix4::from_translation(Vector3::new(0.0, 3.0, 0.0)) * Matrix4::from_scale(50.0);
 
-		self.scene
-			.load_texture_from_bytes(include_bytes!("./smooth-grass.png"))
-			.expect("Failed to load texture");
 		self.objects = vec![self.scene.add(floor)];
 	}
 

@@ -1,7 +1,5 @@
-use crate::{
-	Color, LineMaterial, Material, MountContext, RenderContext, SceneObject, SimpleVertex,
-};
-use cgmath::{Matrix4, Point2, Point3, SquareMatrix, Vector3};
+use crate::{LineMaterial, Material, MountContext, RenderContext, SceneObject, SimpleVertex};
+use cgmath::{Matrix4, Point3, SquareMatrix};
 use std::mem::size_of_val;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
@@ -102,7 +100,7 @@ impl SceneObject for DebugNormals {
 		self.transform.clone()
 	}
 
-	fn material(&self) -> Option<&dyn Material> {
-		Some(&self.material)
+	fn material(&self) -> &dyn Material {
+		&self.material
 	}
 }

@@ -1,17 +1,76 @@
 use std::num::NonZeroU32;
 
-use image::{ImageBuffer, Rgba};
-
-use crate::RenderContext;
+use image::{ImageBuffer, ImageError, Rgba};
 
 pub struct Texture {
+	width: u32,
+	height: u32,
+	pixels: ImageBuffer<Rgba<u8>, Vec<u8>>,
+	buffer: Option<TextureBuffer>,
+}
+
+pub struct TextureBuffer {
 	pub texture: wgpu::Texture,
 	pub view: wgpu::TextureView,
 	pub sampler: wgpu::Sampler,
 }
 
 impl Texture {
-	pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float; // 1.
+	pub fn from_image_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
+		let img = image::load_from_memory(bytes)?.to_rgba8();
+		let width = img.width();
+		let height = img.height();
+
+		Ok(Self {
+			width,
+			height,
+			pixels: img,
+			buffer: None,
+		})
+	}
+	pub fn new(width: u32, height: u32) -> Self {
+		Self {
+			width,
+			height,
+			pixels: ImageBuffer::new(width, height),
+			buffer: None,
+		}
+	}
+
+	pub fn is_allocated(&self) -> bool {
+		self.buffer.is_some()
+	}
+
+	pub fn allocate(&mut self, device: &wgpu::Device, label: &str) {
+		self.destroy();
+		self.buffer = Some(TextureBuffer::new(device, self.width, self.height, label));
+	}
+
+	pub fn destroy(&mut self) {
+		self.buffer = None;
+	}
+
+	pub fn upload(&self, queue: &mut wgpu::Queue) {
+		if let Some(buffer) = self.buffer.as_ref() {
+			buffer.write(queue, &self.pixels);
+		}
+	}
+
+	pub fn write(&self, queue: &mut wgpu::Queue, contents: &ImageBuffer<Rgba<u8>, Vec<u8>>) {
+		// FIXME Error if there's no buffer -- or queue the request?
+		if let Some(buffer) = self.buffer.as_ref() {
+			buffer.write(queue, contents);
+		}
+	}
+
+	/// Get a reference to the texture's buffer.
+	pub fn buffer(&self) -> Option<&TextureBuffer> {
+		self.buffer.as_ref()
+	}
+}
+
+impl TextureBuffer {
+	pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 	pub fn new(device: &wgpu::Device, width: u32, height: u32, label: &str) -> Self {
 		let label = format!("{} texture", label);
@@ -25,7 +84,7 @@ impl Texture {
 			mip_level_count: 1,
 			sample_count: 1,
 			dimension: wgpu::TextureDimension::D2,
-			format: wgpu::TextureFormat::Bgra8UnormSrgb,
+			format: wgpu::TextureFormat::Rgba8UnormSrgb,
 			usage: wgpu::TextureUsages::TEXTURE_BINDING
 				| wgpu::TextureUsages::COPY_SRC
 				| wgpu::TextureUsages::COPY_DST

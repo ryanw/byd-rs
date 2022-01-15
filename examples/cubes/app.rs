@@ -10,7 +10,7 @@ pub struct App {
 	camera: FreeCamera,
 	renderer: Renderer,
 
-	cube: Mesh<SimpleVertex>,
+	cube: Mesh<SimpleVertex, BasicMaterial>,
 	cube_ids: Vec<usize>,
 }
 
@@ -21,7 +21,7 @@ impl App {
 		renderer.attach(&window);
 		let scene = Scene::new();
 		let camera = FreeCamera::new();
-		let mut cube: Mesh<SimpleVertex> = Mesh::new(
+		let mut cube: Mesh<SimpleVertex, _> = Mesh::new(
 			Geometry::cube(),
 			BasicMaterial::new(Color::new(1.0, 0.0, 1.0, 1.0)),
 		);
@@ -66,7 +66,7 @@ impl App {
 	pub fn update(&mut self, dt: f32) {
 		for id in &self.cube_ids {
 			self.scene
-				.with_object_mut(*id, |cube: &mut Mesh<SimpleVertex>| {
+				.with_object_mut(*id, |cube: &mut Mesh<SimpleVertex, BasicMaterial>| {
 					cube.transform = cube.transform
 						* Matrix4::from(Euler::new(Rad(0.0), Rad(1.0 * dt), Rad(0.623 * dt)));
 				});

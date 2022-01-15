@@ -1,4 +1,4 @@
-use byd::{BasicMaterial, Color, Geometry, Mesh, SimpleVertex};
+use byd::{Color, Geometry, Mesh, SimpleVertex, TextureMaterial};
 use cgmath::{InnerSpace, Point2, Point3, Vector3};
 use noise::{Fbm, MultiFractal, NoiseFn, Seedable};
 
@@ -13,7 +13,11 @@ impl Terrain {
 		Self { noise }
 	}
 
-	pub fn generate_mesh(&self, x_offset: u32, z_offset: u32) -> Mesh<SimpleVertex, BasicMaterial> {
+	pub fn generate_mesh(
+		&self,
+		x_offset: u32,
+		z_offset: u32,
+	) -> Mesh<SimpleVertex, TextureMaterial> {
 		let mut vertices = vec![];
 		let width = 32;
 		let depth = 32;
@@ -46,16 +50,13 @@ impl Terrain {
 					vertices.push(SimpleVertex {
 						position,
 						normal,
-						..Default::default()
+						uv: Point2::new(p[0] + 0.5, 1.0 - (p[2] + 0.5)),
 					});
 				}
 			}
 		}
 
-		let mesh = Mesh::new(
-			Geometry::new(vertices),
-			BasicMaterial::new(Color::new(0.0, 0.5, 0.1, 1.0)),
-		);
+		let mesh = Mesh::new(Geometry::new(vertices), TextureMaterial::new(0));
 
 		mesh
 	}
@@ -63,17 +64,6 @@ impl Terrain {
 	fn height(&self, pos: &Point2<f32>) -> f32 {
 		self.noise.get([pos.x as f64, pos.y as f64, 0.0]) as f32 * 4.0
 	}
-
-	fn normal(&self, pos: &Point2<f32>) -> f32 {
-		self.noise.get([pos.x as f64, pos.y as f64, 0.0]) as f32 * 4.0
-	}
-}
-
-fn calculate_normal(tri: &[SimpleVertex]) -> Vector3<f32> {
-	let u = tri[1].position - tri[0].position;
-	let v = tri[2].position - tri[0].position;
-
-	u.cross(v)
 }
 
 const QUAD_POINTS: [[f32; 3]; 6] = [

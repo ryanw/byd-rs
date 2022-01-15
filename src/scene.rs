@@ -4,22 +4,23 @@ use crate::{
 		SAMPLER_BINDING, TEXTURE_BINDING, TEXTURE_ENABLED_BINDING,
 	},
 	BasicMaterial, Camera, Color, LineMaterial, Material, MountContext, Pipeline, RenderContext,
-	Texture, TextureMaterial,
+	Texture, TextureBuffer, TextureMaterial,
 };
 use cgmath::{Matrix4, SquareMatrix, Vector4};
 use downcast_rs::{impl_downcast, Downcast};
-use image::{DynamicImage, ImageError};
 use std::{
-	collections::{HashMap, HashSet, VecDeque},
+	collections::{HashMap, HashSet},
 	mem::size_of,
 	sync::atomic::{AtomicUsize, Ordering},
 };
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 const MAX_ACTORS: u64 = 2048;
 
 pub type ObjectID = usize;
-pub static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+pub type TextureID = usize;
+pub static NEXT_OBJECT_ID: AtomicUsize = AtomicUsize::new(1);
+pub static NEXT_TEXTURE_ID: AtomicUsize = AtomicUsize::new(0);
+pub static DEFAULT_MATERIAL: BasicMaterial = BasicMaterial::new(Color::new(1.0, 0.25, 0.1, 1.0));
 
 pub trait SceneObject: Downcast {
 	fn render<'a>(&'a mut self, _ctx: &mut RenderContext<'a>) {}
@@ -28,8 +29,8 @@ pub trait SceneObject: Downcast {
 	fn transform(&self) -> Matrix4<f32> {
 		Matrix4::identity()
 	}
-	fn material(&self) -> Option<&dyn Material> {
-		None
+	fn material(&self) -> &dyn Material {
+		&DEFAULT_MATERIAL
 	}
 }
 impl_downcast!(SceneObject);
@@ -132,7 +133,7 @@ impl DebugUniforms {
 pub struct SceneUniforms {
 	pipeline: SimplePipeline,
 	bind_group: wgpu::BindGroup,
-	texture_bind_groups: Vec<wgpu::BindGroup>,
+	texture_bind_groups: HashMap<TextureID, wgpu::BindGroup>,
 	camera_buffer: wgpu::Buffer,
 	actor_buffer: wgpu::Buffer,
 	enabled_buffer: wgpu::Buffer,
@@ -205,7 +206,7 @@ impl SceneUniforms {
 		Self {
 			pipeline,
 			bind_group,
-			texture_bind_groups: vec![],
+			texture_bind_groups: HashMap::new(),
 			camera_buffer,
 			actor_buffer,
 			enabled_buffer,
@@ -241,21 +242,23 @@ impl SceneUniforms {
 		render_pass.set_bind_group(0, &self.bind_group, &[offset]);
 	}
 
-	fn bind_texture<'a>(&'a self, ctx: &mut RenderContext<'a>, index: usize) {
-		let uniform_alignment =
-			ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
-		let offset = (if index == 0 { 0 } else { 1 } * uniform_alignment) as wgpu::DynamicOffset;
+	fn bind_texture<'a>(&'a self, ctx: &mut RenderContext<'a>, id: TextureID) {
+		if let Some(texture) = self.texture_bind_groups.get(&id) {
+			let uniform_alignment =
+				ctx.device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
+			let is_enabled_offset =
+				(if id == 0 { 0 } else { uniform_alignment }) as wgpu::DynamicOffset;
 
-		ctx.render_pass
-			.set_bind_group(1, &self.texture_bind_groups[index], &[offset]);
+			ctx.render_pass
+				.set_bind_group(1, texture, &[is_enabled_offset]);
+		}
 	}
 
-	fn add_texture(&mut self, device: &wgpu::Device, texture: &Texture) -> usize {
-		let id = self.texture_bind_groups.len() + 1;
-
+	fn add_texture(&mut self, id: TextureID, device: &wgpu::Device, texture: &TextureBuffer) {
 		log::debug!("Creating BindGroup for texture {}", id);
-		self.texture_bind_groups
-			.push(device.create_bind_group(&wgpu::BindGroupDescriptor {
+		self.texture_bind_groups.insert(
+			id,
+			device.create_bind_group(&wgpu::BindGroupDescriptor {
 				label: Some("SimplePipeline Texture Bind Group"),
 				layout: self.pipeline.texture_bind_group_layout(),
 				entries: &[
@@ -276,62 +279,69 @@ impl SceneUniforms {
 						resource: wgpu::BindingResource::Sampler(&texture.sampler),
 					},
 				],
-			}));
-
-		id
+			}),
+		);
 	}
 }
 
 pub struct Scene {
 	objects: HashMap<ObjectID, Box<dyn SceneObject>>,
+	textures: HashMap<TextureID, Texture>,
 	uniforms: Option<SceneUniforms>,
 	debug_uniforms: Option<DebugUniforms>,
 
 	added: HashSet<ObjectID>,
 	removed: HashSet<ObjectID>,
-	texture_queue: VecDeque<DynamicImage>,
+	added_textures: HashSet<TextureID>,
+	removed_textures: HashSet<TextureID>,
 }
 
 impl Scene {
 	pub fn new() -> Self {
 		let mut scene = Self {
 			objects: HashMap::new(),
+			textures: HashMap::new(),
 			uniforms: None,
 			debug_uniforms: None,
 			added: HashSet::new(),
 			removed: HashSet::new(),
-			texture_queue: VecDeque::new(),
+			added_textures: HashSet::new(),
+			removed_textures: HashSet::new(),
 		};
 
 		// Add a default texture
-		scene
-			.load_texture_from_bytes(include_bytes!("../assets/pixel.png"))
-			.unwrap();
+		let id = scene.add_texture(
+			Texture::from_image_bytes(include_bytes!("../assets/pixel.png"))
+				.expect("Failed to load default texture"),
+		);
+		assert!(id == 0);
 
 		scene
 	}
 
-	pub fn load_texture_from_bytes(&mut self, bytes: &[u8]) -> Result<(), ImageError> {
-		self.texture_queue
-			.push_back(image::load_from_memory(bytes)?);
-
-		log::debug!("Added texture to load queue");
-		Ok(())
+	pub fn add_texture(&mut self, texture: Texture) -> TextureID {
+		let id = NEXT_TEXTURE_ID.fetch_add(1, Ordering::Relaxed);
+		self.textures.insert(id, texture);
+		self.added_textures.insert(id);
+		id
 	}
 
 	pub fn process_texture_queue(&mut self, device: &wgpu::Device, queue: &mut wgpu::Queue) {
 		if let Some(uniforms) = self.uniforms.as_mut() {
-			if self.texture_queue.len() > 0 {
-				log::debug!(
-					"Processing texture queue: {} items",
-					self.texture_queue.len()
-				);
+			// Add flagged objects
+			for id in self.added_textures.drain() {
+				if let Some(texture) = self.textures.get_mut(&id) {
+					texture.allocate(device, "Some Texture");
+					texture.upload(queue);
+					uniforms.add_texture(id, device, texture.buffer().unwrap());
+				}
 			}
-			for image in self.texture_queue.drain(..) {
-				let rgba = image.as_rgba8().expect("Image isn't RGBA8");
-				let texture = Texture::new(device, rgba.width(), rgba.height(), "Some Texture");
-				texture.write(queue, rgba);
-				uniforms.add_texture(device, &texture);
+
+			// Remove flagged objects
+			for id in self.removed_textures.drain() {
+				if let Some(_texture) = self.textures.remove(&id) {
+					// Free automatically
+				}
 			}
 		}
 	}
@@ -369,9 +379,8 @@ impl Scene {
 		uniforms.set_camera(ctx, ctx.camera);
 		debug_uniforms.set_camera(ctx, ctx.camera);
 
-		let default_material = BasicMaterial::new(Color::new(1.0, 0.0, 0.0, 1.0));
 		for (id, object) in &mut self.objects {
-			let material = object.material().unwrap_or(&default_material);
+			let material = object.material();
 			if let Some(material) = material.downcast_ref::<BasicMaterial>() {
 				// Update object position
 				uniforms.set_actor(
@@ -424,7 +433,7 @@ impl Scene {
 	where
 		O: 'static + SceneObject,
 	{
-		let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+		let id = NEXT_OBJECT_ID.fetch_add(1, Ordering::Relaxed);
 		self.objects.insert(id, Box::new(object));
 		self.added.insert(id);
 		id
