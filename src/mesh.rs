@@ -67,6 +67,11 @@ impl<V: Vertex> Mesh<V> {
 	pub fn geometry_mut(&mut self) -> &mut Geometry<V> {
 		&mut self.geometry
 	}
+
+	/// Set the mesh's material.
+	pub fn set_material(&mut self, material: impl Material) {
+		self.material = Box::new(material);
+	}
 }
 
 impl<V: Vertex> SceneObject for Mesh<V> {

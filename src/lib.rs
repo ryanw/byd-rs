@@ -49,6 +49,9 @@ pub use texture::*;
 mod debug_normal;
 pub use debug_normal::*;
 
+pub mod gltf;
+pub use gltf::*;
+
 /*
 #[cfg(unix)]
 pub mod term;

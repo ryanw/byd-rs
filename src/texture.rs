@@ -1,6 +1,7 @@
-use std::num::NonZeroU32;
-
-use image::{ImageBuffer, ImageError, Rgba};
+use image::{
+	io::Reader as ImageReader, DynamicImage, GenericImageView, ImageBuffer, ImageError, Rgba,
+};
+use std::{error, num::NonZeroU32};
 
 pub struct Texture {
 	width: u32,
@@ -17,17 +18,30 @@ pub struct TextureBuffer {
 
 impl Texture {
 	pub fn from_image_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
-		let img = image::load_from_memory(bytes)?.to_rgba8();
+		let img = image::load_from_memory(bytes)?;
+
+		Ok(Self::from_image(img))
+	}
+
+	pub fn from_image(img: DynamicImage) -> Self {
+		let img = img.to_rgba8();
 		let width = img.width();
 		let height = img.height();
 
-		Ok(Self {
+		Self {
 			width,
 			height,
 			pixels: img,
 			buffer: None,
-		})
+		}
 	}
+
+	pub fn load(filename: &str) -> Result<Self, Box<dyn error::Error>> {
+		log::debug!("Opening image file: {}", filename);
+		let img = ImageReader::open(filename)?.decode()?;
+		Ok(Self::from_image(img))
+	}
+
 	pub fn new(width: u32, height: u32) -> Self {
 		Self {
 			width,
@@ -95,9 +109,9 @@ impl TextureBuffer {
 		let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 		let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 			label: Some(&format!("{} sampler", label)),
-			address_mode_u: wgpu::AddressMode::ClampToEdge,
-			address_mode_v: wgpu::AddressMode::ClampToEdge,
-			address_mode_w: wgpu::AddressMode::ClampToEdge,
+			address_mode_u: wgpu::AddressMode::Repeat,
+			address_mode_v: wgpu::AddressMode::Repeat,
+			address_mode_w: wgpu::AddressMode::Repeat,
 			mag_filter: wgpu::FilterMode::Nearest,
 			min_filter: wgpu::FilterMode::Nearest,
 			mipmap_filter: wgpu::FilterMode::Nearest,

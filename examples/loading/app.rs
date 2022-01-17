@@ -1,9 +1,9 @@
 use byd::{
-	Camera, Event, FreeCamera, Geometry, Key, Mesh, MouseButton, Renderer, Scene, SimpleVertex,
-	Texture, TextureMaterial, Window,
+	Camera, Event, FreeCamera, Geometry, Gltf, Key, Mesh, MouseButton, PrimitiveVertex, Renderer,
+	Scene, SimpleVertex, Texture, TextureMaterial, Window,
 };
-use cgmath::{Matrix4, Point2, Point3, Vector3};
-use std::collections::HashSet;
+use cgmath::{Euler, Matrix4, Point2, Point3, Rad, Vector3};
+use std::{collections::HashSet, error::Error};
 
 pub struct App {
 	window: Option<Window>,
@@ -14,6 +14,7 @@ pub struct App {
 	renderer: Renderer,
 	held_keys: HashSet<Key>,
 	objects: Vec<usize>,
+	textures: Vec<usize>,
 }
 
 impl App {
@@ -36,6 +37,7 @@ impl App {
 			renderer,
 			held_keys: HashSet::with_capacity(16),
 			objects: vec![],
+			textures: vec![],
 		}
 	}
 }
@@ -43,6 +45,15 @@ impl App {
 impl App {
 	fn update(&mut self, dt: f32) {
 		self.update_camera(dt);
+
+		for id in &self.objects {
+			self.scene
+				.with_object_mut(*id, |cube: &mut Mesh<PrimitiveVertex>| {
+					cube.transform =
+						Matrix4::from(Euler::new(Rad(0.0), Rad(1.0 * dt), Rad(0.0 * dt)))
+							* cube.transform;
+				});
+		}
 	}
 
 	fn render(&mut self, _dt: f32) {
@@ -52,6 +63,30 @@ impl App {
 	}
 
 	fn build_scene(&mut self) {
+		self.build_floor();
+		self.load_thingy().expect("Failed to load thingy mesh");
+	}
+
+	fn load_thingy(&mut self) -> Result<(), Box<dyn Error>> {
+		let mut thingy = Gltf::load("./examples/loading/assets/duck/Duck.gltf")?;
+
+		for texture in thingy.textures.drain(..) {
+			self.textures.push(self.scene.add_texture(texture));
+		}
+
+		for (i, mut mesh) in thingy.meshes.drain(..).enumerate() {
+			mesh.transform = Matrix4::from_translation(Vector3::new(0.0, 3.0, 0.0))
+				* Matrix4::from_scale(3.0)
+				* mesh.transform;
+			let texture_id = self.textures[thingy.mesh_textures.remove(&i).unwrap()];
+			mesh.set_material(TextureMaterial::new(texture_id));
+			self.objects.push(self.scene.add(mesh));
+		}
+
+		Ok(())
+	}
+
+	fn build_floor(&mut self) {
 		let texture_id = self.scene.add_texture(
 			Texture::from_image_bytes(include_bytes!("../../assets/checker.tif"))
 				.expect("Failed to load texture"),
@@ -99,6 +134,7 @@ impl App {
 
 	pub fn run(mut self) {
 		self.build_scene();
+		//std::process::exit(0);
 
 		let window = self.window.take().unwrap();
 		let mut grabbed = false;

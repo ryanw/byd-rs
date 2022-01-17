@@ -1,7 +1,7 @@
 use crate::{
 	pipelines::{
-		ActorUniform, CameraUniform, LinePipeline, SimplePipeline, ACTOR_BINDING, CAMERA_BINDING,
-		SAMPLER_BINDING, TEXTURE_BINDING, TEXTURE_ENABLED_BINDING,
+		ActorUniform, CameraUniform, LinePipeline, PrimitivePipeline, SimplePipeline,
+		ACTOR_BINDING, CAMERA_BINDING, SAMPLER_BINDING, TEXTURE_BINDING, TEXTURE_ENABLED_BINDING,
 	},
 	BasicMaterial, Camera, Color, LineMaterial, MountContext, Pipeline, RenderContext, SceneObject,
 	Texture, TextureBuffer, TextureMaterial,
@@ -304,7 +304,7 @@ impl DebugUniforms {
 }
 
 pub struct SceneUniforms {
-	pipeline: SimplePipeline,
+	pipeline: PrimitivePipeline,
 	bind_group: wgpu::BindGroup,
 	texture_bind_groups: HashMap<TextureID, wgpu::BindGroup>,
 	camera_buffer: wgpu::Buffer,
@@ -315,7 +315,7 @@ pub struct SceneUniforms {
 impl SceneUniforms {
 	pub fn new(device: &wgpu::Device, queue: &mut wgpu::Queue) -> Self {
 		log::debug!("Building Scene Uniforms");
-		let pipeline = SimplePipeline::new(device);
+		let pipeline = PrimitivePipeline::new(device);
 
 		let uniform_alignment =
 			device.limits().min_uniform_buffer_offset_alignment as wgpu::BufferAddress;
@@ -352,7 +352,7 @@ impl SceneUniforms {
 		let actor_size = size_of::<ActorUniform>() as wgpu::BufferAddress;
 
 		let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-			label: Some("SimplePipeline Bind Group"),
+			label: Some("PrimitivePipeline Bind Group"),
 			layout: pipeline.bind_group_layout(),
 			entries: &[
 				// Camera

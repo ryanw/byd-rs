@@ -1,5 +1,7 @@
 mod simple;
 pub use simple::*;
+mod primitive;
+pub use primitive::PrimitivePipeline;
 mod line;
 pub use line::LinePipeline;
 mod quad;
