@@ -3,8 +3,8 @@ use crate::{
 		ActorUniform, CameraUniform, LinePipeline, PrimitivePipeline, SimplePipeline,
 		ACTOR_BINDING, CAMERA_BINDING, SAMPLER_BINDING, TEXTURE_BINDING, TEXTURE_ENABLED_BINDING,
 	},
-	BasicMaterial, Camera, Color, LineMaterial, MountContext, Pipeline, RenderContext, SceneObject,
-	Texture, TextureBuffer, TextureMaterial,
+	BasicMaterial, Camera, Color, CustomMaterial, LineMaterial, MountContext, Pipeline, Program,
+	RenderContext, SceneObject, Texture, TextureBuffer, TextureMaterial, Vertex,
 };
 use cgmath::Vector4;
 use std::{
@@ -17,19 +17,24 @@ const MAX_OBJECTS: u64 = 2048;
 
 pub type ObjectID = usize;
 pub type TextureID = usize;
+pub type ProgramID = usize;
 pub static NEXT_OBJECT_ID: AtomicUsize = AtomicUsize::new(1);
 pub static NEXT_TEXTURE_ID: AtomicUsize = AtomicUsize::new(0);
+pub static NEXT_PROGRAM_ID: AtomicUsize = AtomicUsize::new(0);
 
 pub struct Scene {
 	objects: HashMap<ObjectID, Box<dyn SceneObject>>,
 	textures: HashMap<TextureID, Texture>,
+	programs: HashMap<ProgramID, Box<dyn Program>>,
 	uniforms: Option<SceneUniforms>,
 	debug_uniforms: Option<DebugUniforms>,
 
-	added: HashSet<ObjectID>,
-	removed: HashSet<ObjectID>,
+	added_objects: HashSet<ObjectID>,
+	removed_objects: HashSet<ObjectID>,
 	added_textures: HashSet<TextureID>,
 	removed_textures: HashSet<TextureID>,
+	added_programs: HashSet<ProgramID>,
+	removed_programs: HashSet<ProgramID>,
 }
 
 impl Scene {
@@ -37,12 +42,15 @@ impl Scene {
 		let mut scene = Self {
 			objects: HashMap::new(),
 			textures: HashMap::new(),
+			programs: HashMap::new(),
 			uniforms: None,
 			debug_uniforms: None,
-			added: HashSet::new(),
-			removed: HashSet::new(),
+			added_objects: HashSet::new(),
+			removed_objects: HashSet::new(),
 			added_textures: HashSet::new(),
 			removed_textures: HashSet::new(),
+			added_programs: HashSet::new(),
+			removed_programs: HashSet::new(),
 		};
 
 		// Add a default texture
@@ -62,6 +70,13 @@ impl Scene {
 		id
 	}
 
+	pub fn add_program(&mut self, program: impl Program + 'static) -> ProgramID {
+		let id = NEXT_PROGRAM_ID.fetch_add(1, Ordering::Relaxed);
+		self.programs.insert(id, Box::new(program));
+		self.added_programs.insert(id);
+		id
+	}
+
 	pub fn process_texture_queue(&mut self, device: &wgpu::Device, queue: &mut wgpu::Queue) {
 		if let Some(uniforms) = self.uniforms.as_mut() {
 			// Add flagged objects
@@ -70,6 +85,9 @@ impl Scene {
 					texture.allocate(device, "Some Texture");
 					texture.upload(queue);
 					uniforms.add_texture(id, device, texture.buffer().unwrap());
+					for (_, program) in &mut self.programs {
+						program.add_texture(id, device, texture.buffer().unwrap());
+					}
 				}
 			}
 
@@ -90,20 +108,26 @@ impl Scene {
 
 		let mut mount_ctx = MountContext { device: ctx.device };
 
+		for id in self.added_programs.drain() {
+			if let Some(program) = self.programs.get_mut(&id) {
+				program.compile(ctx);
+			}
+		}
+
 		// Default image bind group hasn't been created yet.
 		if uniforms.texture_bind_groups.len() == 0 {
 			return;
 		}
 
 		// Add flagged objects
-		for id in self.added.drain() {
+		for id in self.added_objects.drain() {
 			if let Some(object) = self.objects.get_mut(&id) {
 				object.mount(&mut mount_ctx);
 			}
 		}
 
 		// Remove flagged objects
-		for id in self.removed.drain() {
+		for id in self.removed_objects.drain() {
 			if let Some(mut object) = self.objects.remove(&id) {
 				object.unmount(&mut mount_ctx);
 			}
@@ -112,10 +136,32 @@ impl Scene {
 		// Update camera position
 		uniforms.set_camera(ctx, ctx.camera);
 		debug_uniforms.set_camera(ctx, ctx.camera);
+		for (_, program) in &mut self.programs {
+			program.set_camera(ctx, ctx.camera);
+		}
 
 		for (id, object) in &mut self.objects {
 			let material = object.material();
-			if let Some(material) = material.downcast_ref::<BasicMaterial>() {
+			if let Some(material) = material.downcast_ref::<CustomMaterial>() {
+				let program = self
+					.programs
+					.get(&material.program_id)
+					.expect("Missing program");
+				// Update object position
+				program.set_actor(
+					ctx,
+					*id as _,
+					ActorUniform {
+						color: Color::new(0.0, 0.0, 0.0, 1.0),
+						model: object.transform(),
+					},
+				);
+
+				// Render object
+				program.bind_actor(ctx, *id as _);
+				program.bind_texture(ctx, 0);
+				object.render(ctx);
+			} else if let Some(material) = material.downcast_ref::<BasicMaterial>() {
 				// Update object position
 				uniforms.set_actor(
 					ctx,
@@ -163,13 +209,10 @@ impl Scene {
 		}
 	}
 
-	pub fn add<O>(&mut self, object: O) -> ObjectID
-	where
-		O: 'static + SceneObject,
-	{
+	pub fn add(&mut self, object: impl SceneObject + 'static) -> ObjectID {
 		let id = NEXT_OBJECT_ID.fetch_add(1, Ordering::Relaxed);
 		self.objects.insert(id, Box::new(object));
-		self.added.insert(id);
+		self.added_objects.insert(id);
 		id
 	}
 
@@ -183,7 +226,7 @@ impl Scene {
 
 	pub fn remove(&mut self, id: ObjectID) {
 		if self.objects.contains_key(&id) {
-			self.removed.insert(id);
+			self.removed_objects.insert(id);
 		}
 	}
 
@@ -433,7 +476,7 @@ impl SceneUniforms {
 			id,
 			device.create_bind_group(&wgpu::BindGroupDescriptor {
 				label: Some("SimplePipeline Texture Bind Group"),
-				layout: self.pipeline.texture_bind_group_layout(),
+				layout: self.pipeline.texture_bind_group_layout().unwrap(),
 				entries: &[
 					wgpu::BindGroupEntry {
 						binding: TEXTURE_ENABLED_BINDING,

@@ -11,33 +11,18 @@ pub const TEXTURE_ENABLED_BINDING: u32 = 0;
 pub const TEXTURE_BINDING: u32 = 1;
 pub const SAMPLER_BINDING: u32 = 2;
 
-#[derive(Copy, Clone, CastBytes)]
-pub struct CameraUniform {
-	pub view: Matrix4<f32>,
-	pub projection: Matrix4<f32>,
-}
-
-impl Uniform for CameraUniform {}
-
-#[derive(Copy, Clone, CastBytes)]
-pub struct ActorUniform {
-	pub color: Vector4<f32>,
-	pub model: Matrix4<f32>,
-}
-impl Uniform for ActorUniform {}
-
-pub struct PrimitivePipeline<V: Vertex = PrimitiveVertex> {
+pub struct CustomPipeline<V: Vertex> {
 	render_pipeline: wgpu::RenderPipeline,
 	bind_group_layout: wgpu::BindGroupLayout,
 	texture_bind_group_layout: wgpu::BindGroupLayout,
 	_phantom_vertex: PhantomData<V>,
 }
 
-impl<V: Vertex> PrimitivePipeline<V> {
-	pub fn new(device: &wgpu::Device) -> Self {
+impl<V: Vertex> CustomPipeline<V> {
+	pub fn new(device: &wgpu::Device, source: &str) -> Self {
 		// Uniforms
 		let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("PrimitivePipeline Bind Group Layout"),
+			label: Some("CustomPipeline Bind Group Layout"),
 			entries: &[
 				// Camera
 				wgpu::BindGroupLayoutEntry {
@@ -66,7 +51,7 @@ impl<V: Vertex> PrimitivePipeline<V> {
 
 		let texture_bind_group_layout =
 			device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-				label: Some("PrimitivePipeline Texture Bind Group Layout"),
+				label: Some("CustomPipeline Texture Bind Group Layout"),
 				entries: &[
 					// Is Enabled
 					wgpu::BindGroupLayoutEntry {
@@ -104,7 +89,7 @@ impl<V: Vertex> PrimitivePipeline<V> {
 		log::debug!("Creating Primitive shader");
 		let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
 			label: Some("Primitive Shader"),
-			source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/primitive.wgsl").into()),
+			source: wgpu::ShaderSource::Wgsl(source.into()),
 		});
 
 		log::debug!("Creating pipeline layout");
@@ -166,7 +151,7 @@ impl<V: Vertex> PrimitivePipeline<V> {
 	}
 }
 
-impl Pipeline for PrimitivePipeline {
+impl<V: Vertex> Pipeline for CustomPipeline<V> {
 	fn apply<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
 		render_pass.set_pipeline(&self.render_pipeline);
 	}

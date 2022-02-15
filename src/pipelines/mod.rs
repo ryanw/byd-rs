@@ -2,6 +2,8 @@ mod simple;
 pub use simple::*;
 mod primitive;
 pub use primitive::PrimitivePipeline;
+mod custom_pipeline;
+pub use custom_pipeline::CustomPipeline;
 mod line;
 pub use line::LinePipeline;
 mod quad;

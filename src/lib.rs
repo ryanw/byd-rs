@@ -4,6 +4,9 @@ pub mod pipeline;
 pub mod pipelines;
 pub use pipeline::*;
 
+pub mod program;
+pub use program::*;
+
 pub mod camera;
 pub use camera::*;
 
